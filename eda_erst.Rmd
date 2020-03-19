@@ -1,0 +1,17 @@
+---
+title: 'Exploratory Data Analysis: Electric Retail Service Territories'
+author: "Eric Scheier"
+date: "3/19/2020"
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# https://hifld-geoplatform.opendata.arcgis.com/datasets/c4fd0b01c2544a2f83440dab292f0980_0
+```
+
