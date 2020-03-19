@@ -1,5 +1,5 @@
-mkdir ncipl
-cd ncipl
+mkdir leroi
+cd leroi
 virtualenv env --python=python3
 source env/bin/activate
 
