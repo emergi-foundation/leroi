@@ -103,6 +103,22 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# R
 *.csv
 .Rproj.user
 *.Rproj
+*cache
+
+# Geospatial Data
+*.cpg
+*.dbf
+*.prj
+*.shp
+*.shx
+*.xml
+
+*.gdb
+
+*.kml
+
+*.zip

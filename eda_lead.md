@@ -4,14 +4,14 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
-    ## ── Attaching packages ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
+    ## ── Attaching packages ────────────────────────────────────── tidyverse 1.3.0 ──
 
     ## ✓ ggplot2 3.2.1     ✓ purrr   0.3.3
     ## ✓ tibble  2.1.3     ✓ dplyr   0.8.3
     ## ✓ tidyr   1.0.2     ✓ stringr 1.4.0
     ## ✓ readr   1.3.1     ✓ forcats 0.4.0
 
-    ## ── Conflicts ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ── Conflicts ───────────────────────────────────────── tidyverse_conflicts() ──
     ## x dplyr::filter() masks stats::filter()
     ## x dplyr::lag()    masks stats::lag()
 
@@ -24,6 +24,9 @@ Introduction
 
 ``` r
 acs_date <- 2016
+youngest_building <- acs_date - 1
+oldest_building <- 1900
+max_units <- 500 # 1 NYC block is 5 acres, assume 100 units/acre
 ```
 
 This is an exploratory data analysis of the Low Income Energy
@@ -55,10 +58,13 @@ data_url <- paste0(base_url,file_name,".csv")
 desired_name <- paste0(file_name,".csv")
 desired_path <- file.path(desired_name)
 
-download.file(data_url,desired_path)
+if (!file.exists(desired_path)){
+  download.file(data_url,desired_path)
+}
 ```
 
-A full data dictionary is available, and downloaded below.
+A full data dictionary is available. It is downloaded and loaded into
+constituent dataframes below.
 
 ``` r
 # https://readxl.tidyverse.org/articles/articles/readxl-workflows.html
@@ -73,40 +79,17 @@ read_then_csv <- function(sheet, path) {
 }
 
 url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/51a2cd49-fd61-4842-82e2-2f90ffec7e42/download/datadictionary.xlsx"
-temp <- tempfile()
-download.file(url,temp,mode="wb")
-path <- temp
-path %>%
-  excel_sheets() %>%
-  set_names() %>% 
-  map(read_then_csv, path = path)
-```
 
-    ## New names:
-    ## * `` -> ...1
-    ## * `` -> ...2
-    ## * `` -> ...3
-    ## * `` -> ...4
-    ## * `` -> ...5
-    ## * … and 3 more problems
+if(!file.exists("Data Dictionary.csv")){
+  temp <- tempfile()
+  download.file(url,temp,mode="wb")
+  path <- temp
+  path %>%
+    excel_sheets() %>%
+    set_names() %>% 
+    map(read_then_csv, path = path)
+}
 
-    ## $`Data Dictionary`
-    ## # A tibble: 53 x 8
-    ##    ...1   ...2     ...3          ...4  ...5  ...6  ...7   ...8                  
-    ##    <chr>  <chr>    <chr>         <chr> <chr> <chr> <chr>  <chr>                 
-    ##  1 YBL I… <NA>     Year of buil… <NA>  <NA>  <NA>  UNITS  Number of occupied ho…
-    ##  2 0      2010+    <NA>          <NA>  <NA>  <NA>  HINCP  Average annual househ…
-    ##  3 1      2000-09  <NA>          <NA>  <NA>  <NA>  ELEP   Original American Com…
-    ##  4 2      1980-99  <NA>          <NA>  <NA>  <NA>  ELEP … Calibrated American C…
-    ##  5 3      1960-79  <NA>          <NA>  <NA>  <NA>  GASP   Original American Com…
-    ##  6 4      1940-59  <NA>          <NA>  <NA>  <NA>  GASP … Calibrated American C…
-    ##  7 5      BEFORE … <NA>          <NA>  <NA>  <NA>  GASP-… Calibrated American C…
-    ##  8 <NA>   <NA>     <NA>          <NA>  <NA>  <NA>  FULP   Original American Com…
-    ##  9 BLD I… <NA>     Number of un… <NA>  <NA>  <NA>  COUNT  Average number of ACS…
-    ## 10 0      1 UNIT … <NA>          <NA>  <NA>  <NA>  <NA>   <NA>                  
-    ## # … with 43 more rows
-
-``` r
 data_dict <- read_csv("Data Dictionary.csv")
 ```
 
@@ -140,7 +123,10 @@ hfl_dict <- hfl_dict[-1, ]
 
 burden_dict <- data_dict[1:9,7:8]
 names(burden_dict) <- c("Variable", "Description")
-burden_dict <- rbind(burden_dict, names(hfl_dict), names(bld_dict), names(ybl_dict))
+burden_dict <- rbind(burden_dict, 
+                     names(hfl_dict), 
+                     names(bld_dict), 
+                     names(ybl_dict))
 burden_dict
 ```
 
@@ -228,6 +214,8 @@ Munging Steps:
 -   Create `min_age` from `YBL INDEX`.
 -   Create `min_units` from `BLD INDEX`.
 -   Create `detached` from `BLD INDEX`.
+-   Create the Energy Expenditures Indicator `mean_energy_cost`.
+-   Create the Energy Burden Indicator `mean_energy_burden`.
 
 Remove Fractional Units
 -----------------------
@@ -304,16 +292,171 @@ old (this data was collected in 2016), in the `1980-99` range at least
 youngest rather than oldest age because it avoids the requirement to
 make an assumption about the oldest age of buildings built before 1940.
 
+For simplicity, I assume that the youngest building is 1 year old.
+
 ``` r
 #Create `min_age` from `YBL INDEX`.
+
+ybl_ranges <- str_extract_all(ybl_dict$`Year of building first construction`, "[0-9]+", simplify=TRUE)
+ybl_ranges <- apply(ybl_ranges, c(1,2), as.numeric)
+ybl_ranges[1,2] <- youngest_building
+ybl_ranges[6,2] <- ybl_ranges[6,1]
+ybl_ranges[6,1] <- oldest_building
+ybl_ranges[2:5,2] <- floor(ybl_ranges[2:5,1]/100)*100 + ybl_ranges[2:5,2]
+
+ybl_ranges <- data.frame(ybl_ranges)
+names(ybl_ranges) <- c("min_year", "max_year")
+ybl_ranges$min_age <- acs_date - ybl_ranges$max_year
+ybl_ranges$max_age <- acs_date - ybl_ranges$min_year
+ybl_dict <- cbind(ybl_dict, ybl_ranges)
+ybl_dict$`YBL INDEX` <- as.factor(ybl_dict$`YBL INDEX`)
+
+
+ybl_dict <- rename(ybl_dict,
+                   year_constructed=`Year of building first construction`)
+
+ybl_dict$year_constructed <- as.factor(ybl_dict$year_constructed)
+
+data$`YBL INDEX` <- as.factor(data$`YBL INDEX`)
+data <- merge(data, ybl_dict[c("YBL INDEX",
+                               "min_age",
+                               "year_constructed")], 
+              by = "YBL INDEX", 
+              all.x = TRUE)
 ```
 
-``` r
-#Create `min_units` from `BLD INDEX`.
-```
+Similar to building age, the variable `BLD INDEX` represents a
+non-uniformly distributed set of buckets for the range of
+`number of units in the building`, as well as whether single unit
+households are attached or detached from neighboring households. I will
+extract the minimum number of units from the range, and whether the
+building is detached.
+
+Those households labeled `OTHER UNIT` will be given values of `NA` for
+this characteristic.
 
 ``` r
+#Create `min_units` from `BLD INDEX` (and `max_units`).
 #Create `detached` from `BLD INDEX`.
+
+bld_ranges <- str_extract_all(bld_dict$`Number of units in the building`, "[0-9]+", simplify=TRUE)
+
+bld_ranges <- apply(bld_ranges, c(1,2), as.numeric)
+bld_ranges[1:3,2] <- bld_ranges[1:3,1]
+bld_ranges[8,2] <- max_units
+
+bld_ranges <- data.frame(bld_ranges)
+names(bld_ranges) <- c("min_units", "max_units")
+
+bld_ranges$detached <- as.factor(c(1,rep(0,nrow(bld_ranges)-2),NA))
+
+bld_dict <- cbind(bld_dict, bld_ranges)
+bld_dict$`BLD INDEX` <- as.factor(bld_dict$`BLD INDEX`)
+
+bld_dict <- rename(bld_dict,
+                   number_of_units=`Number of units in the building`)
+
+bld_dict$number_of_units <- as.factor(bld_dict$number_of_units)
+
+data$`BLD INDEX` <- as.factor(data$`BLD INDEX`)
+data <- merge(data, bld_dict[c("BLD INDEX",
+                               "min_units",
+                               "detached",
+                               "number_of_units")], 
+              by = "BLD INDEX", 
+              all.x = TRUE)
+```
+
+Assign Primary Heating Fuel Type
+--------------------------------
+
+``` r
+hfl_dict <- rename(hfl_dict,
+               primary_heating_fuel=`Primary heating fuel type`)
+
+hfl_dict$primary_heating_fuel <- as.factor(hfl_dict$primary_heating_fuel)
+
+data <- merge(data, hfl_dict[c("HFL INDEX","primary_heating_fuel")], 
+              by = "HFL INDEX", 
+              all.x = TRUE)
+```
+
+Create the Energy Burden Indicators
+-----------------------------------
+
+Creating the final metric of average energy burden for each cohort is as
+simple as adding up the montly expenditures on electricity (`ELEP CAL`),
+natural gas (`GASP CAL`), and other fuels (`FULP`), and dividing this by
+the cohort’s average monthly income (`HINCP / 12.0`).
+
+``` r
+# Create the Energy Expenditures Indicator `mean_energy_cost`.
+
+data$mean_energy_cost <- data$`ELEP CAL` + data$`GASP CAL` + data$FULP
+
+# Create the Energy Burden Indicator `mean_energy_burden`.
+
+data$mean_energy_burden <- data$mean_energy_cost / (data$HINCP/12.0)
+
+negative_or_zero_rows <- data$HINCP<=0 | data$mean_energy_cost<=0
+negative_or_zero_data <- data[negative_or_zero_rows,]
+data <- data[!negative_or_zero_rows,]
+
+n_or_zero_rate <- nrow(negative_or_zero_data)/(nrow(data)+nrow(negative_or_zero_data))
+n_or_zero_unit_rate <- sum(negative_or_zero_data$UNITS)/(sum(data$UNITS)+sum(negative_or_zero_data$UNITS))
+```
+
+I have seperated anyone with incomes or energy costs less than or equal
+to $0 into another dataset for analysis. This represents approximately
+2% of the housing units and 6% of the examined cohorts, so it will be
+important to make sure that this subset does not contain systematic
+bias.
+
+Clean-up
+--------
+
+-   rename variables for convenience
+-   keep only what we need
+
+Select the columns I want:
+
+``` r
+data <- select(data,
+               `GEO ID`,
+               `PUMA10`,
+               `FMR`,
+               `occupancy_type`,
+               `income_bracket`,
+               `primary_heating_fuel`,
+               `number_of_units`,
+               `year_constructed`,
+               `UNITS`, 
+               `HINCP`, 
+               `ELEP CAL`, 
+               `GASP CAL`, 
+               `FULP`, 
+               `COUNT`, 
+               `min_age`, 
+               `min_units`, 
+               `detached`,
+               `mean_energy_cost`,
+               `mean_energy_burden`)
+```
+
+Rename columns to remove spaces:
+
+``` r
+data <- rename(data,
+               tract_geo_id=`GEO ID`,
+               puma10_code=`PUMA10`,
+               fmr_code=`FMR`,
+               households=`UNITS`, 
+               acs_responses=`COUNT`,
+               annual_income=`HINCP`,
+               electricity_spend=`ELEP CAL`, 
+               gas_spend=`GASP CAL`, 
+               other_spend=`FULP`)
+write_csv(data,"clean_lead.csv")
 ```
 
 Questions:
