@@ -1,7 +1,7 @@
 ---
 title: 'Exploratory Data Ananlysis: Low-Income Energy Affordability Data'
 author: "Eric Scheier"
-date: "3/19/2020"
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
 output:
   md_document:
     variant: markdown_github
@@ -10,338 +10,845 @@ output:
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 
+library(knitr)
+library(MASS)
+library(scales)
+library(caret)
 library(tidyverse)
-library(readxl)
-```
-# Introduction
-
-```{r params}
-acs_date <- 2016
-youngest_building <- acs_date - 1
-oldest_building <- 1900
-max_units <- 500 # 1 NYC block is 5 acres, assume 100 units/acre
+library(spatstat)
+library(GGally)
+library(ggpubr)
+library(patchwork)
+library(mgcv)
 ```
 
+# Questions:
 
-This is an exploratory data analysis of the Low Income Energy Affordability Data [LEAD](https://catalog.data.gov/dataset/low-income-energy-affordability-data-lead-tool) from the Department of Energy (DOE). This dataset represents an estimate of the monthly energy bills and average incomes of households in the united states, segmented by the following characteristics:
-
-+ Year of building first construction
-+ Number of units in the building
-+ Primary heating fuel type
-+ Whether the residents own or rent the unit
-+ Household income relative to Area Median Income or Federal Poverty Level
-+ State
-+ County, City, or Census Tract
-
-For this project, I will use the data which displays the results by census tract in terms of Area Median Income for the state of North Carolina.
-
-# Acquiring Data
-
-```{r cache=TRUE}
-base_url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/831ac481-1a60-4f87-a887-15b310ffff53/download/"
-
-
-file_name <- "ami68tractshnc"
-data_url <- paste0(base_url,file_name,".csv")
-desired_name <- paste0(file_name,".csv")
-desired_path <- file.path(desired_name)
-
-if (!file.exists(desired_path)){
-  download.file(data_url,desired_path)
-}
-```
-
-A full data dictionary is available. It is downloaded and loaded into constituent dataframes below.
++ How many ACS survey responses inform each segment?
++ Are there any trends in the energy burden based on age, units/building, home ownership, home attachment, ?
++ Perform a principal component analysis
++ Does `year_constructed` or `min_age` better explain the energy burden variance?
++ Does `number_of_units` or `min_units` better explain the energy burden variance?
 
 ```{r}
-# https://readxl.tidyverse.org/articles/articles/readxl-workflows.html
-
-read_then_csv <- function(sheet, path) {
-  pathbase <- path %>%
-    basename() %>%
-    tools::file_path_sans_ext()
-  path %>%
-    read_excel(sheet = sheet, col_names = FALSE, col_types = "text") %>% 
-    write_csv(paste0(sheet, ".csv"))
-}
-
-url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/51a2cd49-fd61-4842-82e2-2f90ffec7e42/download/datadictionary.xlsx"
-
-if(!file.exists("Data Dictionary.csv")){
-  temp <- tempfile()
-  download.file(url,temp,mode="wb")
-  path <- temp
-  path %>%
-    excel_sheets() %>%
-    set_names() %>% 
-    map(read_then_csv, path = path)
-}
-
-data_dict <- read_csv("Data Dictionary.csv")
-
-ybl_dict <- data_dict[1:7,1:2]
-ybl_dict[1,2] <- data_dict[1,3]
-names(ybl_dict) <- as.matrix(ybl_dict[1, ])
-ybl_dict <- ybl_dict[-1, ]
-
-bld_dict <- data_dict[9:18,1:2]
-bld_dict[1,2] <- data_dict[9,3]
-names(bld_dict) <- as.matrix(bld_dict[1, ])
-bld_dict <- bld_dict[-1, ]
-
-hfl_dict <- data_dict[20:29,1:2]
-hfl_dict[1,2] <- data_dict[20,3]
-names(hfl_dict) <- as.matrix(hfl_dict[1, ])
-hfl_dict <- hfl_dict[-1, ]
-
-burden_dict <- data_dict[1:9,7:8]
-names(burden_dict) <- c("Variable", "Description")
-burden_dict <- rbind(burden_dict, 
-                     names(hfl_dict), 
-                     names(bld_dict), 
-                     names(ybl_dict))
-burden_dict
-```
-
-
-```{r}
-data <- read_csv(desired_path)
+data <- read_csv(file.path(getwd(),"clean_lead.csv"),
+                          col_types=cols(
+                            geo_id = readr::col_character(),
+                            state_id = readr::col_character(),
+                            county_id = readr::col_character(),
+                            tract_id = readr::col_character(),
+                            puma10_code = readr::col_character(),
+                            fmr_code = readr::col_character(),
+                            occupancy_type = readr::col_factor(),
+                            income_bracket = readr::col_factor(),
+                            primary_heating_fuel = readr::col_factor(),
+                            number_of_units = readr::col_factor(),
+                            year_constructed = readr::col_factor(),
+                            households = col_double(),
+                            annual_income = col_double(),
+                            electricity_spend = col_double(),
+                            gas_spend = col_double(),
+                            other_spend = col_double(),
+                            acs_responses = col_double(),
+                            min_age = col_double(),
+                            min_units = col_double(),
+                            detached = readr::col_factor(NULL),
+                            mean_energy_cost = col_double(),
+                            mean_energy_burden = col_double(),
+                            mean_eroi = col_double(),
+                            energy_poverty = col_logical(),
+                            pct_non_male = col_double(), 
+                            median_age = col_double(),
+                            pct_no_high_school = col_double(),
+                            pct_non_white = col_double(),
+                            median_income = col_double(),
+                            acs_total_households = col_double(),
+                            utility_id = readr::col_factor(levels = NULL, ordered = FALSE, include_na = TRUE),
+                            percent_tract_served = readr::col_double(),
+                            tract_households_served = readr::col_double(),
+                            utility_name = readr::col_character(),
+                            ownership_type = readr::col_factor(NULL),
+                            balancing_authority = readr::col_factor(NULL),
+                            retail_revenue_thousands = readr::col_double(),
+                            retail_sales_MWh = readr::col_double(),
+                            retail_customers = readr::col_double(),
+                            implied_price_kWh = readr::col_double(),
+                            revenue_per_customer = readr::col_double(),
+                            implied_electricity_use = readr::col_double()
+                            ))
 
 summary(data)
 ```
 
-# Data Munging
-
-Munging Steps:
-
-+ Remove rows where `UNITS<1`.
-+ Seperate the `AMI68` column into `occupancy_type` and `income_bracket` columns
-+ Create `min_age` from `YBL INDEX`.
-+ Create `min_units` from `BLD INDEX`.
-+ Create `detached` from `BLD INDEX`.
-+ Create the Energy Expenditures Indicator `mean_energy_cost`.
-+ Create the Energy Burden Indicator `mean_energy_burden`.
-
-## Remove Fractional Units
-
-The estimation procedure used by the DOE results in an estimated number of occupied housing units meeting the subset characteristics (`UNITS`) and displays the number of American Community Survey responses that contribute to the estimate of energy expenditures (`COUNT`). We first remove any categories that have fewer than 1 unit represented, since this is not physically possible.
 
 ```{r}
-#Remove rows where `UNITS<1`.
-
-data <- data[data$UNITS>=1,]
-```
-
-This results in removing `r 100*sum(data$UNITS<1)/length(data$UNITS)`% of the available rows (gross: `r sum(data$UNITS<1)` rows of `r length(data$UNITS)`). This is a total of `r sum(data$UNITS[data$UNITS<1])` housing units, or `r 100*sum(data$UNITS[data$UNITS<1])/sum(data$UNITS)`% of the estimated total `r sum(data$UNITS)` units in the state.
-
-## Break Out Ownership & Income Bracket
-
-The data combines the unit's ownership status (`OWNER` vs. `RENTER`) and income bracket as a fraction of Area Median Income (`0-30%`, `30-60%`, `60-80%`, `80-100%`, or `100%+`) into the same column (e.g. `r data$AMI68[1]`). This `AMI68` column needs to be seperated for meaningful analysis. These categorical variables are saved as factors.
-
-```{r}
-#Seperate the `AMI68` column into `occupancy_type` and `income_bracket` columns
-
-data <- data %>% 
-  separate(col="AMI68",
-           into=c("occupancy_type", "income_bracket"), 
-           sep = " ", 
-           remove = FALSE, 
-           convert = FALSE,
-           extra = "warn", 
-           fill = "warn")
-
-data$occupancy_type <- as.factor(data$occupancy_type)
-data$income_bracket <- as.factor(data$income_bracket)
-```
-
-## Create Meaningful Indicators from Indices
-
-The `YBL INDEX` and `BLD INDEX` columns need some further treatment. `YBL INDEX` represents the year the building was first constructed, but is an index seperated into 10-20 year increments dating back to 1940. 
-
-```{r}
-ybl_dict
-```
-
-
-Since these indeces represent different possible ages and the increments are not uniform, I will add a numerical indicator (`min_age`) to represent the youngest age the building could possibly be based on its category. Thus, a building in the `2010+` range must be at least 0 years old (this data was collected in `r acs_date`), in the `1980-99` range at least `r acs_date-1980` years old, in the `BEFORE 1940` range at least `r acs_date-1940`, etc. I choose youngest rather than oldest age because it avoids the requirement to make an assumption about the oldest age of buildings built before 1940.
-
-For simplicity, I assume that the youngest building is 1 year old.
-
-```{r}
-#Create `min_age` from `YBL INDEX`.
-
-ybl_ranges <- str_extract_all(ybl_dict$`Year of building first construction`, "[0-9]+", simplify=TRUE)
-ybl_ranges <- apply(ybl_ranges, c(1,2), as.numeric)
-ybl_ranges[1,2] <- youngest_building
-ybl_ranges[6,2] <- ybl_ranges[6,1]
-ybl_ranges[6,1] <- oldest_building
-ybl_ranges[2:5,2] <- floor(ybl_ranges[2:5,1]/100)*100 + ybl_ranges[2:5,2]
-
-ybl_ranges <- data.frame(ybl_ranges)
-names(ybl_ranges) <- c("min_year", "max_year")
-ybl_ranges$min_age <- acs_date - ybl_ranges$max_year
-ybl_ranges$max_age <- acs_date - ybl_ranges$min_year
-ybl_dict <- cbind(ybl_dict, ybl_ranges)
-ybl_dict$`YBL INDEX` <- as.factor(ybl_dict$`YBL INDEX`)
-
-
-ybl_dict <- rename(ybl_dict,
-                   year_constructed=`Year of building first construction`)
-
-ybl_dict$year_constructed <- as.factor(ybl_dict$year_constructed)
-
-data$`YBL INDEX` <- as.factor(data$`YBL INDEX`)
-data <- merge(data, ybl_dict[c("YBL INDEX",
-                               "min_age",
-                               "year_constructed")], 
-              by = "YBL INDEX", 
-              all.x = TRUE)
-```
-
-Similar to building age, the variable `BLD INDEX` represents a non-uniformly distributed set of buckets for the range of `number of units in the building`, as well as whether single unit households are attached or detached from neighboring households. I will extract the minimum number of units from the range, and whether the building is detached.
-
-Those households labeled `OTHER UNIT` will be given values of `NA` for this characteristic.
-
-```{r}
-#Create `min_units` from `BLD INDEX` (and `max_units`).
-#Create `detached` from `BLD INDEX`.
-
-bld_ranges <- str_extract_all(bld_dict$`Number of units in the building`, "[0-9]+", simplify=TRUE)
-
-bld_ranges <- apply(bld_ranges, c(1,2), as.numeric)
-bld_ranges[1:3,2] <- bld_ranges[1:3,1]
-bld_ranges[8,2] <- max_units
-
-bld_ranges <- data.frame(bld_ranges)
-names(bld_ranges) <- c("min_units", "max_units")
-
-bld_ranges$detached <- as.factor(c(1,rep(0,nrow(bld_ranges)-2),NA))
-
-bld_dict <- cbind(bld_dict, bld_ranges)
-bld_dict$`BLD INDEX` <- as.factor(bld_dict$`BLD INDEX`)
-
-bld_dict <- rename(bld_dict,
-                   number_of_units=`Number of units in the building`)
-
-bld_dict$number_of_units <- as.factor(bld_dict$number_of_units)
-
-data$`BLD INDEX` <- as.factor(data$`BLD INDEX`)
-data <- merge(data, bld_dict[c("BLD INDEX",
-                               "min_units",
-                               "detached",
-                               "number_of_units")], 
-              by = "BLD INDEX", 
-              all.x = TRUE)
-```
-
-## Assign Primary Heating Fuel Type
-
-```{r}
-hfl_dict <- rename(hfl_dict,
-               primary_heating_fuel=`Primary heating fuel type`)
-
-hfl_dict$primary_heating_fuel <- as.factor(hfl_dict$primary_heating_fuel)
-
-data <- merge(data, hfl_dict[c("HFL INDEX","primary_heating_fuel")], 
-              by = "HFL INDEX", 
-              all.x = TRUE)
+str(data)
 ```
 
 
 
-## Create the Energy Burden Indicators
-
-Creating the final metric of average energy burden for each cohort is as simple as adding up the montly expenditures on electricity (`ELEP CAL`), natural gas (`GASP CAL`), and other fuels (`FULP`), and dividing this by the cohort's average monthly income (`HINCP / 12.0`).
-
 ```{r}
-# Create the Energy Expenditures Indicator `mean_energy_cost`.
-
-data$mean_energy_cost <- data$`ELEP CAL` + data$`GASP CAL` + data$FULP
-
-# Create the Energy Burden Indicator `mean_energy_burden`.
-
-data$mean_energy_burden <- data$mean_energy_cost / (data$HINCP/12.0)
-
-negative_or_zero_rows <- data$HINCP<=0 | data$mean_energy_cost<=0
-negative_or_zero_data <- data[negative_or_zero_rows,]
-data <- data[!negative_or_zero_rows,]
-
-n_or_zero_rate <- nrow(negative_or_zero_data)/(nrow(data)+nrow(negative_or_zero_data))
-n_or_zero_unit_rate <- sum(negative_or_zero_data$UNITS)/(sum(data$UNITS)+sum(negative_or_zero_data$UNITS))
-```
-
-I have seperated anyone with incomes or energy costs less than or equal to $0 into another dataset for analysis. This represents approximately `r round(100*n_or_zero_unit_rate,0)`% of the housing units and `r round(100*n_or_zero_rate,0)`% of the examined cohorts, so it will be important to make sure that this subset does not contain systematic bias.
-
-## Clean-up
-
-- rename variables for convenience
-- keep only what we need
-
-Select the columns I want:
-
-```{r}
-data <- select(data,
-               `GEO ID`,
-               `PUMA10`,
-               `FMR`,
-               `occupancy_type`,
-               `income_bracket`,
-               `primary_heating_fuel`,
-               `number_of_units`,
-               `year_constructed`,
-               `UNITS`, 
-               `HINCP`, 
-               `ELEP CAL`, 
-               `GASP CAL`, 
-               `FULP`, 
-               `COUNT`, 
-               `min_age`, 
-               `min_units`, 
-               `detached`,
-               `mean_energy_cost`,
-               `mean_energy_burden`)
-```
-
-Rename columns to remove spaces:
-
-```{r}
-data <- rename(data,
-               tract_geo_id=`GEO ID`,
-               puma10_code=`PUMA10`,
-               fmr_code=`FMR`,
-               households=`UNITS`, 
-               acs_responses=`COUNT`,
-               annual_income=`HINCP`,
-               electricity_spend=`ELEP CAL`, 
-               gas_spend=`GASP CAL`, 
-               other_spend=`FULP`)
-write_csv(data,"clean_lead.csv")
+clean_data <- drop_na(data)
+summary(clean_data)
 ```
 
 
-# Questions:
+## How many ACS survey responses inform each segment?
 
-+ How many ACS survey responses inform each segment? (`COUNT` vs `UNITS`)
-+ Are there any trends in the energy burden based on age, units/building, home ownership, home attachment, ?
-+ Perform a principal component analysis
-+ Does `YBL INDEX` or `min_age` better explain the energy burden variance?
-+ Does `BLD INDEX` or `min_units` better explain the energy burden variance?
+```{r}
+rph <- data %>% 
+  mutate(households_per_response=households/acs_responses) %>% 
+  dplyr::select(households_per_response, 
+         households,
+         acs_responses)
+  
+summary(rph)
+```
+
+```{r}
+ggplot(data=rph, aes(x=households,y=acs_responses)) + 
+  geom_point() + 
+  stat_smooth(method=lm)
+```
+
+```{r}
+rph %>% 
+  arrange(desc(households_per_response)) %>% 
+  slice(1:10)
+```
+
+```{r}
+rph %>% 
+  arrange((households_per_response)) %>% 
+  slice(1:10)
+```
+
+```{r eval=FALSE}
+rph %>% 
+  ggplot(aes(x=households_per_response, y=households)) + 
+  geom_density(alpha=.2, fill="#FF6666", na.rm=TRUE) + 
+  geom_histogram(binwidth=1, stat="identity") + 
+  scale_x_continuous(limits = c(NA, 100))
+```
+
+
+```{r}
+data %>% group_by(tract_id) %>% summarise(lead_households=sum(households), acs_households=mean(acs_total_households)) %>% 
+  ggplot(aes(x=lead_households, y=acs_households)) + 
+  geom_point() + stat_smooth(method=lm)
+```
+
+```{r}
+weighted_means <- clean_data %>%# drop_na() %>% 
+  group_by(ownership_type) %>% 
+  summarise(households_sum = sum(households),
+            cost_mean = weighted.mean(mean_energy_cost, households),
+            electric_spend_mean = weighted.mean(electricity_spend, households),
+            electric_use_mean = weighted.mean(implied_electricity_use, households),
+            electric_cost_mean = weighted.mean(implied_price_kWh, households),
+            energy_burden_mean = weighted.mean(mean_energy_burden, households),
+            mean_income = weighted.mean(annual_income, households),
+            mean_eroi = weighted.mean(mean_eroi, households))
+weighted_means
+```
+
+
+```{r}
+weighted_medians <- clean_data %>%# drop_na() %>% 
+   group_by(ownership_type) %>% 
+   summarise(median_electricity_spend = if( sum(!is.na(households))<3 ){NA} else { weighted.median(electricity_spend, households, na.rm=TRUE)},
+             median_eroi = if( sum(!is.na(households))<3 ){NA} else { weighted.median(mean_eroi, households, na.rm=TRUE)},
+            median_income = if( sum(!is.na(households))<3 ){NA} else { weighted.median(annual_income, households, na.rm=TRUE)},
+            median_electricity_price = if( sum(!is.na(households))<3 ){NA} else { weighted.median(implied_price_kWh, households, na.rm=TRUE)},
+            median_electricity_use = if( sum(!is.na(households))<3 ){NA} else { weighted.median(implied_electricity_use, households, na.rm=TRUE)},
+            median_energy_burden = if( sum(!is.na(households))<3 ){NA} else { weighted.median(mean_energy_burden, households, na.rm=TRUE)},
+            median_energy_cost = if( sum(!is.na(households))<3 ){NA} else { weighted.median(mean_energy_cost, households, na.rm=TRUE)}
+            )
+
+weighted_medians
+```
+
+```{r}
+#clean_data$ownership_type_household_weights
+
+clean_data <- clean_data %>% 
+  group_by(ownership_type) %>% 
+  mutate(ownership_households = sum(households)) %>% 
+  mutate(ownership_type_household_weights = households/ownership_households)
+```
+
+
+```{r}
+mean_eroi <- clean_data %>% #drop_na() %>%
+  ggplot(aes(x=mean_eroi, weight=ownership_type_household_weights/3, fill=ownership_type, color=ownership_type)) + 
+  geom_density(alpha=0.1) + 
+  ggtitle("Household Energy Return on Investment By Utility Ownership Type") + 
+  scale_x_continuous(labels = scales::unit_format(unit = "x", scale = 1, accuracy = 1),
+                     breaks=seq(from=0,to=100,by=10), 
+                     minor_breaks=seq(from=0,to=100,by=1),
+                     limits=c(0,100), name="Household Energy Return on Investment\n(Income Earned for each Dollar Spent on Energy)") + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.05), name="Proportion of Households") + 
+  theme_minimal() + 
+  theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  geom_vline(data=weighted_medians, aes(xintercept=median_eroi,  color=ownership_type),
+               linetype="solid", size=0.5, alpha=0.75) + 
+  geom_vline(xintercept = 10, linetype="dotted", 
+                color = "red", size=1.0, alpha=0.75) + 
+  annotate("text", x = 10, y = 0.0075/3, angle = 90, color="red", label = "Energy Poverty Line", 
+    vjust = -0.5, parse = FALSE, alpha=0.75) + 
+  annotate("text", x = min(weighted_medians$median_eroi), y = 0.005/3, angle = 90, color="gray25", label = "Median", 
+    vjust = -0.5, parse = FALSE, alpha=0.75)
+
+mean_eroi
+```
+
+```{r}
+federal_poverty_line <- 16240
+annual_income <- clean_data %>% #drop_na() %>%
+  ggplot(aes(x=annual_income, weight=ownership_type_household_weights/3, fill=ownership_type, color=ownership_type)) + 
+  geom_density(alpha=0.1) + 
+  ggtitle("Household Annual Income By Utility Ownership Type") + 
+  scale_x_continuous(labels = scales::dollar_format(), limits=c(0,150000), name="Annual Income") + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.0005), name="Proportion of Households") + 
+  theme_minimal() + 
+  theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  geom_vline(data=weighted_medians, aes(xintercept=median_income,  color=ownership_type),
+               linetype="solid", size=0.5, alpha=0.75) +
+  geom_vline(xintercept = federal_poverty_line, linetype="dotted",
+                color = "red", size=1.0, alpha=0.75)
+
+annual_income +
+  annotate("text", x = federal_poverty_line, y = 0.0000035/3, angle = 90, color="red", label = "Federal Poverty Line",
+    vjust = -0.5, parse = FALSE, alpha=0.75) +
+  annotate("text", x = min(weighted_medians$median_income), y = 0.0000025/3, angle = 90, color="gray25", label = "Median",
+    vjust = -0.5, parse = FALSE, alpha=0.75)
+```
+
+
+```{r}
+mean_energy_cost <- clean_data %>%
+  ggplot(aes(x=mean_energy_cost, weight=ownership_type_household_weights/3, fill=ownership_type, color=ownership_type)) + 
+  geom_density(alpha=0.1) + 
+  ggtitle("Household Monthly Energy Spending By Utility Ownership Type") + 
+  scale_x_continuous(labels = scales::dollar_format(), limits=c(0,300), name="Energy Spend",
+                     breaks=seq(from=0,to=300,by=50), 
+                     minor_breaks=seq(from=0,to=300,by=10)) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.0005), name="Proportion of Households") + 
+  theme_minimal() + 
+  theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  geom_vline(data=weighted_medians, aes(xintercept=median_energy_cost,  color=ownership_type),
+               linetype="solid", size=0.5, alpha=0.75)
+
+mean_energy_cost + annotate("text", x = min(weighted_medians$median_energy_cost), y = 0.0025/3, angle = 90, color="gray25", label = "Median",vjust = -0.5, parse = FALSE, alpha=0.75)
+```
+
+```{r}
+electricity_spend <- clean_data %>%
+  ggplot(aes(x=electricity_spend, weight=ownership_type_household_weights/3, fill=ownership_type, color=ownership_type)) + 
+  geom_density(alpha=0.1) + 
+  ggtitle("Household Monthly Electricity Spending By Utility Ownership Type") + 
+  scale_x_continuous(labels = scales::dollar_format(), limits=c(0,300), name="Energy Spend",
+                     breaks=seq(from=0,to=300,by=50), 
+                     minor_breaks=seq(from=0,to=300,by=10)) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.0005), name="Proportion of Households") + 
+  theme_minimal() + 
+  theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  geom_vline(data=weighted_medians, aes(xintercept=median_electricity_spend,  color=ownership_type),
+               linetype="solid", size=0.5, alpha=0.75)
+
+electricity_spend + annotate("text", x = min(weighted_medians$median_electricity_spend), y = 0.0025/3, angle = 90, color="gray25", label = "Median",vjust = -0.5, parse = FALSE, alpha=0.75)
+```
+
+```{r}
+implied_price_kWh <- clean_data %>%
+  ggplot(aes(x=implied_price_kWh, weight=ownership_type_household_weights/3000, fill=ownership_type, color=ownership_type)) + 
+  geom_density(alpha=0.1) + 
+  ggtitle("Electricity Price By Utility Ownership Type") + 
+  scale_x_continuous(labels = scales::dollar_format(), limits=c(0.1,0.15), name="Electricity Unit Cost ($/kWh)",
+                     breaks=seq(from=0.1,to=0.15,by=0.01), 
+                     minor_breaks=seq(from=0.1,to=0.15,by=0.0025)) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), name="Proportion of Households") + 
+  theme_minimal() + 
+  theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  geom_vline(data=weighted_medians, aes(xintercept=median_electricity_price,  color=ownership_type),
+               linetype="solid", size=0.5, alpha=0.75) +
+  annotate("text", x = min(weighted_medians$median_electricity_price), y = 0.1, angle = 90, color="gray25", label = "Median",vjust = -0.5, parse = FALSE, alpha=0.75)
+
+implied_price_kWh
+```
+
+```{r}
+implied_electricity_use <- clean_data %>%
+  ggplot(aes(x=implied_electricity_use, weight=ownership_type_household_weights/3, fill=ownership_type, color=ownership_type)) + 
+  geom_density(alpha=0.1) + 
+  ggtitle("Implied Monthly Household Electricity Use By Utility Ownership Type") + 
+  scale_x_continuous(labels = comma, limits=c(0,2200), 
+                     name="Electricity Consumption (kWh)",
+                     breaks=seq(from=0,to=2200,by=500), 
+                     minor_breaks=seq(from=0,to=2200,by=100)) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.0005), 
+                     name="Proportion of Households") + 
+  theme_minimal() + 
+  theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  geom_vline(data=weighted_medians, aes(xintercept=median_electricity_use,  color=ownership_type),
+               linetype="solid", size=0.5, alpha=0.75) +
+  annotate("text", x = min(weighted_medians$median_electricity_use), y = 0.00015, angle = 90, color="gray25", label = "Median",vjust = -0.5, parse = FALSE, alpha=0.75)
+
+implied_electricity_use
+```
+
+
+```{r}
+contour_plot <- ggplot(clean_data, aes(x=annual_income,
+                                       y=mean_energy_cost,
+                                       weight=ownership_type_household_weights/3,
+                                       color=ownership_type,
+                                       fill=ownership_type)) +
+  stat_density_2d(aes(alpha = ..piece..), geom="polygon") +
+  guides(alpha = FALSE) +
+  stat_smooth(method = "lm", fullrange = TRUE) +
+  geom_rug() + 
+  scale_y_continuous(name = "Monthly Energy Cost", 
+                     labels = scales::dollar_format(),
+                     limits = c(0, 300), expand = c(0, 0)) + 
+  scale_x_continuous(name = "Annual Income", 
+                     labels = scales::dollar_format(),
+                     limits = c(0, 150000), expand = c(0, 0)) + 
+  theme_pubr() + #   theme(plot.margin = margin()) + 
+  theme(legend.position = "bottom")
+
+contour_plot# + facet_grid(. ~ ownership_type)
+```
+
+
+```{r}
+dens1 <- ggplot(clean_data, aes(x = annual_income, weight=ownership_type_household_weights/3, 
+                                fill = ownership_type)) + 
+  geom_density(alpha = 0.4) + 
+  theme_void() + xlim(0,250000) + 
+  theme(legend.position = "none")
+
+dens2 <- ggplot(clean_data, aes(x = mean_energy_cost, weight=ownership_type_household_weights/3, 
+                                fill = ownership_type)) + 
+  geom_density(alpha = 0.4) + 
+  theme_void() + xlim(1,300) + 
+  theme(legend.position = "none") + 
+  coord_flip()
+```
+
+
+```{r}
+# https://stackoverflow.com/a/59581217/2668097
+annual_income + theme_void() + theme(legend.position = "none") + labs(title = NULL, x=NULL, y=NULL) + 
+  ggtitle("Monthly Energy Cost vs. Annual Income") + 
+  plot_spacer() + 
+  contour_plot + theme(legend.justification = c(1, 1), legend.position = c(1, 1), legend.title=element_blank()) + 
+  mean_energy_cost + coord_flip() + theme_void() + theme(legend.position = "none") + labs(title = NULL, x=NULL, y=NULL) + 
+  plot_layout(ncol = 2, nrow = 2, widths = c(4, 1), heights = c(1, 4))
+```
+
+
+
+
+```{r echo=FALSE,results='hide',fig.keep='all'}
+predictor_vars <- c(
+#"county_id",
+"occupancy_type",
+"primary_heating_fuel",
+#"number_of_units",
+#"year_constructed",
+"min_age",
+"min_units",
+"detached",
+"pct_non_male",
+"median_age",
+"pct_no_high_school",
+"pct_non_white",
+"median_income",
+#"utility_id",
+#"percent_tract_served",
+"ownership_type",
+#"balancing_authority",
+#"retail_revenue_thousands",
+#"retail_sales_MWh",
+#"retail_customers",
+"implied_price_kWh",
+"revenue_per_customer",
+"mean_energy_burden"
+)
+
+household_characteristics <- c(
+  "occupancy_type",
+  "primary_heating_fuel",
+  #"number_of_units",
+  #"year_constructed",
+  "min_age",
+  "min_units",
+  "detached",
+  "ownership_type",
+  "implied_price_kWh",
+  "mean_energy_burden"
+)
+
+pair_plot <- ggpairs(data %>% drop_na(), aes(colour = ownership_type, weight=households, alpha = 0.4),
+                     columns = household_characteristics,
+                     upper = list(continuous = wrap("cor", size = 2)),
+                     progress=FALSE)
+
+pair_plot
+```
+
+
+```{r}
+ggsave("./household_pair_plot.png", plot=pair_plot, width=10,height=7.5,units="in")
+```
+
+
+```{r}
+demographic_characteristics <- c(
+  "pct_non_male",
+  "median_age",
+  "pct_no_high_school",
+  "pct_non_white",
+  "median_income",
+  "ownership_type",
+  "implied_price_kWh",
+  "mean_energy_burden"
+)
+
+pair_plot <- ggpairs(data %>% drop_na(), aes(colour = ownership_type, alpha = 0.4),
+                     columns = demographic_characteristics,
+                     upper = list(continuous = wrap("cor", size = 2)),
+                     progress=FALSE)
+
+pair_plot
+```
+
+```{r}
+ggsave("./demographic_pair_plot.png", plot=pair_plot, width=10,height=7.5,units="in")
+```
+
+```{r}
+library(tigris)
+options(tigris_use_cache = FALSE)
+
+census_tracts <- tracts(cb = TRUE, year = 2016, class="sf", state="NC", refresh=TRUE)
+#census_tracts <- st_transform(census_tracts, crs=st_crs(data_shp))
+```
+
+```{r}
+#geo_data <- left_join(census_tracts, data, by=c("TRACTCE" = "tract_id"))
+```
+
+
+```{r}
+geo_data %>% 
+  ggplot() +
+  geom_sf(aes(fill=ownership_type),size=.1) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "top")
+```
+
+
+## Does `year_constructed` or `min_age` better explain the energy burden variance?
+
+### Building Age vs Energy Burden
+
+```{r}
+summary(lm(formula=mean_energy_burden ~ year_constructed, data = data))
+```
+
+```{r}
+summary(lm(formula=mean_energy_burden ~ min_age, data = data))
+```
+
+### Building Age vs Energy Cost
+
+```{r}
+summary(lm(formula=mean_energy_cost ~ year_constructed, data = data))
+```
+
+```{r}
+summary(lm(formula=mean_energy_cost ~ min_age, data = data))
+```
+
+### Building Age vs Energy Poverty
+
+```{r}
+summary(glm(energy_poverty ~ year_constructed, data = data, family = binomial('logit')))
+```
+
+```{r}
+summary(glm(energy_poverty ~ min_age, data = data, family = binomial('logit')))
+```
+
+## Does `number_of_units` or `min_units` better explain the energy burden variance?
+
+### Building Units vs Energy Burden
+
+```{r}
+summary(lm(formula=mean_energy_burden ~ number_of_units, data = data))
+```
+
+```{r}
+summary(lm(formula=mean_energy_burden ~ min_units + detached, data = data))
+```
+
+### Building Units vs Energy Cost
+
+```{r}
+summary(lm(formula=mean_energy_cost ~ number_of_units, data = data))
+```
+
+```{r}
+summary(lm(formula=mean_energy_cost ~ min_units + detached, data = data))
+```
+
+### Building Units vs Energy Poverty
+
+```{r}
+summary(glm(energy_poverty ~ number_of_units, data = data, family = binomial('logit')))
+```
+
+```{r}
+summary(glm(energy_poverty ~ min_units + detached, data = data, family = binomial('logit')))
+```
+
+# Simple Models
+
+First, I decide on which variable are of interest and which predictors to use.
+
+```{r}
+response_var <- "energy_poverty"
+model_type <- "classification" #regression
+
+predictor_vars <- c(
+#"county_id",
+"occupancy_type",
+"primary_heating_fuel",
+"number_of_units",
+"year_constructed",
+"min_age",
+"min_units",
+"detached",
+"pct_non_male",
+"median_age",
+"pct_no_high_school",
+"pct_non_white",
+"median_income",
+#"utility_id",
+"percent_tract_served",
+"ownership_type",
+"balancing_authority",
+"retail_revenue_thousands",
+"retail_sales_MWh",
+"retail_customers",
+"implied_price_kWh",
+"revenue_per_customer"
+)
+
+# predictor_vars <- c("min_age", "number_of_units", "primary_heating_fuel", "occupancy_type")
+```
+
+
+```{r}
+model_data <- clean_data[,c(response_var, predictor_vars)]
+
+model_data[,response_var] <- factor(model_data[[c(response_var)]], levels=unique(model_data[[c(response_var)]]), ordered = FALSE)
+
+model_formula <- as.formula(paste0(response_var," ~ ",paste(predictor_vars, collapse=" + ")))
+```
+
+
+Then, I split the data into training and testing sets.
+
+```{r}
+set.seed(13)
+training_size <- round(.75 * nrow(model_data))  # training set size
+indices = sample(1:nrow(model_data), training_size)
+
+data_train <- clean_data[indices,]
+data_test <- clean_data[-(indices),]
+
+training_set <- model_data[indices,]
+testing_set <- model_data[-(indices),]
+
+dim(data_train)
+
+#prop.table(table(data_train$primary_heating_fuel))
+
+prop.table(table(data_train$energy_poverty))
+prop.table(table(data_test$energy_poverty))
+```
+
+Then I define the classification algorithms to try.
+
+```{r}
+# Always False
+# Logistic Regression
+# Linear Discriminant Analysis
+# Principle Component Analysis
+# K-Nearest Neighbors Classification
+# Support Vector Machines
+# Standard Decision Trees
+# Random Forest
+```
+
+Then I train and test each of them.
+
+```{r}
+test_accuracy <- function(){
+  cm <- confusionMatrix(predictions, training_set[[response_var]])
+}
+```
+
+
+## Always False
+
+```{r}
+false_in_sample_predictions <- factor(rep(FALSE, nrow(training_set)), levels=c("TRUE","FALSE"), ordered=FALSE)
+
+cm <- confusionMatrix(false_in_sample_predictions, training_set[[response_var]])
+```
+
+
+```{r}
+false_out_of_sample_predictions <- rep(FALSE, nrow(testing_set))
+
+false_out_of_sample_performance <- sum(false_out_of_sample_predictions == testing_set$energy_poverty)/nrow(testing_set)
+print(paste0("The false model's out-of-sample accuracy is ",label_percent()(false_out_of_sample_performance)))
+```
+
+## Logistic Regression
+
+```{r}
+logit_model <- glm(model_formula, data = training_set, family = binomial('logit'))
+summary(logit_model)
+```
+
+```{r}
+glm_in_sample_predictions <- predict.glm(object = logit_model,
+                           newdata = training_set,
+                           type = "response") > .5
+
+glm_in_sample_performance <- sum(glm_in_sample_predictions == training_set$energy_poverty)/nrow(training_set)
+print(paste0("The logistic model's in-sample performance is ",label_percent()(glm_in_sample_performance)))
+```
+
+```{r}
+glm_out_of_sample_predictions <- predict.glm(object = logit_model,
+                           newdata = testing_set,
+                           type = "response") > .5
+
+glm_out_of_sample_performance <- sum(glm_out_of_sample_predictions == testing_set$energy_poverty)/nrow(testing_set)
+print(paste0("The logistic model's out-of-sample performance is ",label_percent()(glm_out_of_sample_performance)))
+```
+
+
+## Linear Discriminant Analysis
+
+```{r}
+lda_model <- lda(energy_poverty ~ ., data = training_set)
+summary(lda_model)
+```
+
+```{r}
+lda_in_sample_predictions <- predict(lda_model, newdata=training_set)
+
+lda_in_sample_performance <- sum(lda_in_sample_predictions$class == training_set$energy_poverty)/nrow(training_set)
+print(paste0("The LDA model's in-sample performance is ",label_percent()(lda_in_sample_performance)))
+
+
+```
+
+```{r}
+lda_out_of_sample_predictions <- predict(lda_model, newdata=testing_set)
+
+lda_out_of_sample_performance <- sum(lda_out_of_sample_predictions$class == testing_set$energy_poverty)/nrow(testing_set)
+print(paste0("The LDA model's out-of-sample performance is ",label_percent()(lda_out_of_sample_performance)))
+```
+
+
+## K-Nearest Neighbors Classification
+
+```{r}
+knn(train_data_observations, train_data_observations, cl = train_data_classifiers, k=3)
+```
+
+
+## Support Vector Machines
+
+```{r}
+
+```
+
+
+# Decision Trees
+
+## Standard Decision Trees
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(neuralnet)
+
+fit = rpart(energy_poverty~., data = training_set, method = 'class')
+rpart.plot(fit, extra = 106)
+summary(fit)
+
+# Error rate
+sum(predict(fit, testing_set, type='class') != testing_set$energy_poverty)/nrow(testing_set)
+```
+
+
+```{r}
+fit = rpart(primary_heating_fuel~., data = training_set, method = 'class')
+rpart.plot(fit, box.palette = "blue")#, extra = 106)
+summary(fit)
+```
+
+## Standard Decision Trees for Regression
+
+```{r}
+reg_subset_predictors = c(predictor_vars, "mean_energy_burden")
+reg_subset_predictors = reg_subset_predictors[!predictor_vars %in% c("energy_poverty", "number_of_units",
+"year_constructed")]
+
+reg_data_train_subset = data_train[, reg_subset_predictors]
+reg_data_test_subset = data_test[, reg_subset_predictors]
+tree = rpart(mean_energy_burden~., data = reg_data_train_subset, method = 'anova')
+rpart.plot(tree, extra = 100)
+summary(tree)
+```
+
+```{r}
+RMSE = mean((reg_data_test_subset$mean_energy_burden - predict(tree, reg_data_test_subset))^2) %>% sqrt()
+RMSE
+```
+
+
+## Random Forest
+
+```{r}
+library(randomForest)
+rf_model <- randomForest(
+  formula = as.factor(energy_poverty) ~ .,
+  data=training_set#,
+  #na.action=na.exclude
+)
+summary(rf_model)
+```
+
+
+```{r}
+rf_in_sample_predictions <- predict(rf_model, newdata=training_set)
+
+rf_in_sample_performance <- sum(rf_in_sample_predictions == training_set$energy_poverty)/nrow(training_set)
+print(paste0("The Random Forest model's in-sample performance is ",label_percent()(rf_in_sample_performance)))
+```
+
+```{r}
+rf_out_of_sample_predictions <- predict(rf_model, newdata=testing_set)
+
+rf_out_of_sample_performance <- sum(rf_out_of_sample_predictions == testing_set$energy_poverty)/nrow(testing_set)
+print(paste0("The Random Forest model's out-of-sample performance is ",label_percent()(rf_out_of_sample_performance)))
+```
+
+## Other Simple Models
+
+```{r}
+summary(lm(formula = mean_energy_cost ~ annual_income,
+   data=data))
+```
+
+```{r}
+summary(lm(formula= mean_energy_cost ~ income_bracket +
+             occupancy_type + 
+             primary_heating_fuel + 
+             number_of_units + 
+             year_constructed,
+   data=data))
+```
+
+```{r}
+summary(lm(formula= mean_energy_cost ~ annual_income + 
+             min_units + 
+             occupancy_type + 
+             detached + 
+             primary_heating_fuel + 
+             min_age,
+   data=data))
+```
+
+```{r}
+summary(lm(formula= mean_energy_burden ~ annual_income + 
+             min_units + 
+             occupancy_type + 
+             detached + 
+             primary_heating_fuel + 
+             min_age,
+   data=data))
+```
+
+```{r}
+summary(lm(formula= mean_energy_burden ~ income_bracket +
+             occupancy_type + 
+             primary_heating_fuel + 
+             number_of_units + 
+             year_constructed,
+   data=data))
+```
+
 
 # EDA techniques to integrate
+
++ what is proportion of spending on by fuel type
 
 2. Print the top 10 AQI values and their corresponding sites and dates
 
 ```{r}
-ozone_airq_df2 %>%
-  arrange(desc(AQI)) %>%
-  select(AQI, Site_Num, dateL) %>%
+data %>% 
+  arrange(desc(mean_energy_burden)) %>% 
+  select(mean_energy_burden, 
+         annual_income, 
+         mean_energy_cost, 
+         income_bracket, 
+         households,
+         number_of_units) %>% 
   slice(1:10)
 ```
 
-create a unqiue id for each site identifier
+```{r}
+data %>% 
+  select(mean_energy_burden, 
+         annual_income, 
+         mean_energy_cost, 
+         income_bracket, 
+         households,
+         number_of_units) %>% 
+```
+
 
 ```{r}
-ozone_airq_df2 <- mutate(ozone_airq_df2, SiteID = paste(stcofips, Site_Num, sep="_")) 
+data %>%
+  arrange(desc(mean_energy_cost)) %>%
+  select(mean_energy_cost, annual_income, mean_energy_burden) %>%
+  slice(1:20)
+```
+
+```{r}
+ggplot(data=data,
+       aes(x=mean_energy_burden,y=households)) + 
+      geom_bar(stat="identity")
+```
+
+
+create a unqiue id for each site identifier
+
+```{r eval=FALSE}
+data <- mutate(data, cohort_id = paste(geo_id, , sep="_")) 
 head(ozone_airq_df2$SiteID)
 ```
 

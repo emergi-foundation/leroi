@@ -1,0 +1,146 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(neuralnet)
+clean_lead <- read_csv(file.path("clean_lead_acs.csv"),
+                          col_types=cols(
+                            geo_id = readr::col_factor(),
+                            state_id = readr::col_factor(),
+                            county_id = readr::col_factor(),
+                            tract_id = readr::col_factor(),
+                            puma10_code = readr::col_factor(),
+                            fmr_code = readr::col_factor(),
+                            occupancy_type = readr::col_factor(),
+                            income_bracket = readr::col_factor(),
+                            primary_heating_fuel = readr::col_factor(),
+                            number_of_units = readr::col_factor(),
+                            year_constructed = readr::col_factor(),
+                            households = col_double(),
+                            annual_income = col_double(),
+                            electricity_spend = col_double(),
+                            gas_spend = col_double(),
+                            other_spend = col_double(),
+                            acs_responses = col_double(),
+                            min_age = col_double(),
+                            min_units = col_double(),
+                            detached = readr::col_factor(),
+                            mean_energy_cost = col_double(),
+                            mean_energy_burden = col_double(),
+                            energy_poverty = col_logical(),
+                            pct_non_male = col_double(), 
+                            median_age = col_double(),
+                            pct_no_high_school = col_double(),
+                            pct_non_white = col_double(),
+                            median_income = col_double()
+                            ))
+
+#all(data_reloaded == data, na.rm=TRUE)
+```
+
+
+```{r}
+# Creates training and testing data sets
+
+set.seed(2)
+smp_size <- floor(0.8 * nrow(clean_lead))
+train_ind <- sample(seq_len(nrow(clean_lead)), size = smp_size)
+data_train <- clean_lead[train_ind,]
+data_test <- clean_lead[-train_ind,]
+
+dim(data_train)
+
+#prop.table(table(data_train$primary_heating_fuel))
+
+prop.table(table(data_train$energy_poverty))
+prop.table(table(data_test$energy_poverty))
+```
+
+
+```{r}
+#data_train
+subset_predictors = c("primary_heating_fuel", 
+                      "min_age", 
+                      "min_units",
+                      "detached",
+                      #"number_of_units",
+                      "occupancy_type",
+                      "energy_poverty", 
+                      "pct_non_male", 
+                      "median_age",
+                      "pct_no_high_school",
+                      "pct_non_white",
+                      "median_income"
+                      )
+data_train_subset = data_train[, subset_predictors]
+data_test_subset = data_test[, subset_predictors]
+```
+
+```{r}
+#rpart.control(minsplit = 20, minbucket = round(0/3), maxdepth = 30)
+fit = rpart(energy_poverty~., data = data_train_subset, method = 'class')
+rpart.plot(fit, extra = 106)
+summary(fit)
+
+# Error rate
+sum(predict(fit, data_test_subset, type='class') != data_test_subset$energy_poverty)/nrow(data_test_subset)
+```
+
+
+
+```{r}
+fit = rpart(primary_heating_fuel~., data = data_train_subset, method = 'class')
+rpart.plot(fit, box.palette = "blue")#, extra = 106)
+summary(fit)
+```
+
+
+```{r}
+reg_subset_predictors = c(subset_predictors, "mean_energy_burden")
+reg_subset_predictors = reg_subset_predictors[!reg_subset_predictors %in% c("energy_poverty")]
+
+reg_data_train_subset = data_train[, reg_subset_predictors]
+reg_data_test_subset = data_test[, reg_subset_predictors]
+tree = rpart(mean_energy_burden~., data = reg_data_train_subset, method = 'anova')
+rpart.plot(tree, extra = 100)
+summary(tree)
+```
+
+
+```{r}
+RMSE = mean((reg_data_test_subset$mean_energy_burden - predict(tree, reg_data_test_subset))^2) %>% sqrt()
+RMSE
+```
+
+```{r}
+library(randomForest)
+rf_model <- randomForest(
+  formula = as.factor(energy_poverty) ~ .,
+  data=data_train_subset,
+  na.action=na.exclude
+)
+summary(rf_model)
+```
+
+```{r}
+rf_in_sample_predictions <- predict(rf_model, newdata=data_train_subset)
+
+rf_in_sample_performance <- sum(rf_in_sample_predictions == as.factor(data_train_subset$energy_poverty))/nrow(data_train_subset)
+print(paste0("The Random Forest model's in-sample performance is ",label_percent()(rf_in_sample_performance)))
+```
+
+```{r}
+rf_out_of_sample_predictions <- predict(rf_model, newdata=data_test_subset)
+
+rf_out_of_sample_performance <- sum(rf_out_of_sample_predictions == data_test_subset$energy_poverty)/nrow(data_test_subset)
+print(paste0("The Random Forest model's out-of-sample performance is ",label_percent()(rf_out_of_sample_performance)))
+```

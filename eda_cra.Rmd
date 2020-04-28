@@ -1,0 +1,22 @@
+---
+title: "CRA EDA"
+author: "Eric Scheier"
+date: "4/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+zip_url <- "https://www.ffiec.gov/cra/xls/16exp_aggr.zip"
+
+temp <- tempfile()
+download.file(zip_url,temp)
+unzip(temp)
+unlink(temp)
+
+readLines("cra2016_Aggr_A11a.dat",n=500)
+```
+

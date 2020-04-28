@@ -1,0 +1,132 @@
+---
+title: "Exploratory Data Analysis: Electric Retail Service Territories"
+author: "Eric Scheier"
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
+output:
+  md_document:
+    variant: markdown_github
+---
+
+# Scrap
+
+```{r}
+nc_state %>%
+  ggplot(aes(fill = estimate)) + 
+  geom_sf(color = NA) + 
+  coord_sf(crs = 4326) + 
+  scale_fill_viridis_c(option = "magma")
+```
+
+```{r}
+utility_block_groups <- st_join(nc_state, data_shp, left=FALSE, largest=TRUE)
+```
+
+```{r}
+```
+
+
+```{r}
+utility_block_groups %>% 
+  #filter(TYPE %in% c("COOPERATIVE")) %>% 
+  ggplot(aes(fill=TYPE)) + 
+  geom_sf(color=NA) + 
+  facet_grid(~TYPE) + 
+  coord_sf(crs = 4326)# + 
+  #scale_fill_viridis_c(option = "magma")
+```
+
+```{r}
+utility_block_groups %>% 
+  #filter(TYPE %in% c("COOPERATIVE")) %>% 
+  ggplot(aes(fill=TYPE)) + 
+  geom_sf(color=NA) + 
+  coord_sf(crs = 4326)
+```
+
+
+```{r}
+utility_block_groups %>% 
+  filter(NAME.1=="PIEDMONT ELECTRIC MEMBER CORP") %>% 
+  ggplot(aes(fill = estimate)) + 
+  geom_sf(color = NA) + 
+  coord_sf(crs = 4326) + 
+  scale_fill_viridis_c(option = "magma")
+```
+
+
+## Replace `-999999` with `NA`
+
+```{r}
+na_num_placeholder <- -999999.0
+
+na_num_colnames <- c("SUMMR_PEAK",
+             "WINTR_PEAK",
+             "SUMMER_CAP",
+             "WINTER_CAP",
+             "NET_GEN",
+             "PURCHASED",
+             "NET_EX",
+             "RETAIL_MWH",
+             "WSALE_MWH",
+             "TOTAL_MWH",
+             "TRANS_MWH",
+             "CUSTOMERS")
+
+na_num_cols <- which(names(data) %in% na_num_colnames)
+
+data[, na_num_cols][data[, na_num_cols] == na_num_placeholder] <- NA
+
+summary(data[na_num_cols])
+```
+
+## Replace `NOT AVAILABLE` with `NA`
+
+```{r}
+na_txt_placeholder <- "NOT AVAILABLE"
+
+na_txt_colnames <- c("REGULATED",
+               "CNTRL_AREA",
+               "PLAN_AREA",
+               "HOLDING_CO")
+
+na_txt_cols <- which(names(data) %in% na_txt_colnames)
+
+data[, na_txt_cols][data[, na_txt_cols] == na_txt_placeholder] <- NA
+
+summary(data[na_txt_cols])
+```
+
+
+```{r}
+keep_cols <- c("OBJECTID",
+               "ID",
+               "NAME",
+               "TYPE",
+               na_txt_colnames,
+               na_num_colnames)
+
+data <- data[keep_cols]
+```
+
+
+```{r}
+final_data <- left_join(data, data_shp[c("OBJECTID","geometry")], by="OBJECTID")
+
+summary(final_data)
+```
+
+
+```{r}
+plot(final_data$geometry)
+```
+
+```{r}
+#writeOGR(obj=final_data, dsn=".", layer="clean_erst", driver="ESRI Shapefile")
+write_csv(final_data, "clean_erst.csv")
+```
+
+
+# Questions
+
++ What percent of the state's land/customers/load is served by these territories
++ What percent of the state's land/customers/load is served by Investor Owned Utilities, Cooperatives, or Municipal Providers

@@ -1,0 +1,1334 @@
+\PassOptionsToPackage{unicode=true}{hyperref} % options for packages loaded elsewhere
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[]{article}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\usepackage{fixltx2e} % provides \textsubscript
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provides euro and other symbols
+\else % if luatex or xelatex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Ligatures=TeX,Scale=MatchLowercase}
+\fi
+% use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+% use microtype if available
+\IfFileExists{microtype.sty}{%
+\usepackage[]{microtype}
+\UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\IfFileExists{parskip.sty}{%
+\usepackage{parskip}
+}{% else
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+}
+\usepackage{hyperref}
+\hypersetup{
+            pdftitle={Data Munging: Low-Income Energy Affordability Data},
+            pdfauthor={Eric Scheier},
+            pdfborder={0 0 0},
+            breaklinks=true}
+\urlstyle{same}  % don't use monospace font for urls
+\usepackage[margin=1in]{geometry}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.77,0.63,0.00}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+\setlength{\emergencystretch}{3em}  % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{0}
+% Redefines (sub)paragraphs to behave more like sections
+\ifx\paragraph\undefined\else
+\let\oldparagraph\paragraph
+\renewcommand{\paragraph}[1]{\oldparagraph{#1}\mbox{}}
+\fi
+\ifx\subparagraph\undefined\else
+\let\oldsubparagraph\subparagraph
+\renewcommand{\subparagraph}[1]{\oldsubparagraph{#1}\mbox{}}
+\fi
+
+% set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+
+
+\title{Data Munging: Low-Income Energy Affordability Data}
+\author{Eric Scheier}
+\date{2020-April-28}
+
+\begin{document}
+\maketitle
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{knitr}\OperatorTok{::}\NormalTok{opts_chunk}\OperatorTok{$}\KeywordTok{set}\NormalTok{(}\DataTypeTok{echo =} \OtherTok{TRUE}\NormalTok{)}
+
+\KeywordTok{library}\NormalTok{(scales)}
+\KeywordTok{library}\NormalTok{(tidyverse)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## -- Attaching packages -------------------------------------------------------------------------------------------------------------- tidyverse 1.3.0 --
+\end{verbatim}
+
+\begin{verbatim}
+## v ggplot2 3.2.1     v purrr   0.3.3
+## v tibble  3.0.0     v dplyr   0.8.5
+## v tidyr   1.0.2     v stringr 1.4.0
+## v readr   1.3.1     v forcats 0.5.0
+\end{verbatim}
+
+\begin{verbatim}
+## -- Conflicts ----------------------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
+## x readr::col_factor() masks scales::col_factor()
+## x purrr::discard()    masks scales::discard()
+## x dplyr::filter()     masks stats::filter()
+## x dplyr::lag()        masks stats::lag()
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{library}\NormalTok{(readxl)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{introduction}{%
+\section{Introduction}\label{introduction}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{energy_poverty_line <-}\StringTok{ }\FloatTok{0.10}
+\NormalTok{acs_date <-}\StringTok{ }\DecValTok{2016}
+\NormalTok{youngest_building <-}\StringTok{ }\NormalTok{acs_date }\OperatorTok{-}\StringTok{ }\DecValTok{1}
+\NormalTok{oldest_building <-}\StringTok{ }\DecValTok{1900} \CommentTok{# this assumption is not used in the ultimate analysis}
+\NormalTok{max_units <-}\StringTok{ }\DecValTok{500} \CommentTok{# 1 NYC block is 5 acres, assume 100 units/acre # this assumption is not used in the ultimate analysis}
+\end{Highlighting}
+\end{Shaded}
+
+This is a data munging report for the Low Income Energy Affordability
+Data
+\href{https://catalog.data.gov/dataset/low-income-energy-affordability-data-lead-tool}{LEAD}
+from the Department of Energy (DOE). This dataset represents an estimate
+of the monthly energy bills and average incomes of households in the
+united states, segmented by the following characteristics:
+
+\begin{itemize}
+\tightlist
+\item
+  Year of building first construction
+\item
+  Number of units in the building
+\item
+  Primary heating fuel type
+\item
+  Whether the residents own or rent the unit
+\item
+  Household income relative to Area Median Income or Federal Poverty
+  Level
+\item
+  State
+\item
+  County, City, or Census Tract
+\end{itemize}
+
+For this project, I will use the data which displays the results by
+census tract in terms of Area Median Income for the state of North
+Carolina.
+
+\hypertarget{acquiring-data}{%
+\section{Acquiring Data}\label{acquiring-data}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{base_url <-}\StringTok{ "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/831ac481-1a60-4f87-a887-15b310ffff53/download/"}
+
+
+\NormalTok{file_name <-}\StringTok{ "ami68tractshnc"}
+\NormalTok{data_url <-}\StringTok{ }\KeywordTok{paste0}\NormalTok{(base_url,file_name,}\StringTok{".csv"}\NormalTok{)}
+\NormalTok{desired_name <-}\StringTok{ }\KeywordTok{paste0}\NormalTok{(file_name,}\StringTok{".csv"}\NormalTok{)}
+\NormalTok{desired_path <-}\StringTok{ }\KeywordTok{file.path}\NormalTok{(desired_name)}
+
+\ControlFlowTok{if}\NormalTok{ (}\OperatorTok{!}\KeywordTok{file.exists}\NormalTok{(desired_path))\{}
+  \KeywordTok{download.file}\NormalTok{(data_url,desired_path)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+A full data dictionary is available. It is downloaded and loaded into
+constituent dataframes below.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# https://readxl.tidyverse.org/articles/articles/readxl-workflows.html}
+
+\NormalTok{read_then_csv <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(sheet, path) \{}
+\NormalTok{  pathbase <-}\StringTok{ }\NormalTok{path }\OperatorTok{%>%}
+\StringTok{    }\KeywordTok{basename}\NormalTok{() }\OperatorTok{%>%}
+\StringTok{    }\NormalTok{tools}\OperatorTok{::}\KeywordTok{file_path_sans_ext}\NormalTok{()}
+\NormalTok{  path }\OperatorTok{%>%}
+\StringTok{    }\KeywordTok{read_excel}\NormalTok{(}\DataTypeTok{sheet =}\NormalTok{ sheet, }\DataTypeTok{col_names =} \OtherTok{FALSE}\NormalTok{, }\DataTypeTok{col_types =} \StringTok{"text"}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{write_csv}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(sheet, }\StringTok{".csv"}\NormalTok{))}
+\NormalTok{\}}
+
+\NormalTok{url <-}\StringTok{ "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/51a2cd49-fd61-4842-82e2-2f90ffec7e42/download/datadictionary.xlsx"}
+
+\ControlFlowTok{if}\NormalTok{(}\OperatorTok{!}\KeywordTok{file.exists}\NormalTok{(}\StringTok{"Data Dictionary.csv"}\NormalTok{))\{}
+\NormalTok{  temp <-}\StringTok{ }\KeywordTok{tempfile}\NormalTok{()}
+  \KeywordTok{download.file}\NormalTok{(url,temp,}\DataTypeTok{mode=}\StringTok{"wb"}\NormalTok{)}
+\NormalTok{  path <-}\StringTok{ }\NormalTok{temp}
+\NormalTok{  path }\OperatorTok{%>%}
+\StringTok{    }\KeywordTok{excel_sheets}\NormalTok{() }\OperatorTok{%>%}
+\StringTok{    }\KeywordTok{set_names}\NormalTok{() }\OperatorTok{%>%}\StringTok{ }
+\StringTok{    }\KeywordTok{map}\NormalTok{(read_then_csv, }\DataTypeTok{path =}\NormalTok{ path)}
+\NormalTok{\}}
+
+\NormalTok{data_dict <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(}\StringTok{"Data Dictionary.csv"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Parsed with column specification:
+## cols(
+##   ...1 = col_character(),
+##   ...2 = col_character(),
+##   ...3 = col_character(),
+##   ...4 = col_logical(),
+##   ...5 = col_logical(),
+##   ...6 = col_logical(),
+##   ...7 = col_character(),
+##   ...8 = col_character()
+## )
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ybl_dict <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{1}\OperatorTok{:}\DecValTok{7}\NormalTok{,}\DecValTok{1}\OperatorTok{:}\DecValTok{2}\NormalTok{]}
+\NormalTok{ybl_dict[}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{1}\NormalTok{,}\DecValTok{3}\NormalTok{]}
+\KeywordTok{names}\NormalTok{(ybl_dict) <-}\StringTok{ }\KeywordTok{as.matrix}\NormalTok{(ybl_dict[}\DecValTok{1}\NormalTok{, ])}
+\NormalTok{ybl_dict <-}\StringTok{ }\NormalTok{ybl_dict[}\OperatorTok{-}\DecValTok{1}\NormalTok{, ]}
+
+\NormalTok{bld_dict <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{9}\OperatorTok{:}\DecValTok{18}\NormalTok{,}\DecValTok{1}\OperatorTok{:}\DecValTok{2}\NormalTok{]}
+\NormalTok{bld_dict[}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{9}\NormalTok{,}\DecValTok{3}\NormalTok{]}
+\KeywordTok{names}\NormalTok{(bld_dict) <-}\StringTok{ }\KeywordTok{as.matrix}\NormalTok{(bld_dict[}\DecValTok{1}\NormalTok{, ])}
+\NormalTok{bld_dict <-}\StringTok{ }\NormalTok{bld_dict[}\OperatorTok{-}\DecValTok{1}\NormalTok{, ]}
+
+\NormalTok{hfl_dict <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{20}\OperatorTok{:}\DecValTok{29}\NormalTok{,}\DecValTok{1}\OperatorTok{:}\DecValTok{2}\NormalTok{]}
+\NormalTok{hfl_dict[}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{20}\NormalTok{,}\DecValTok{3}\NormalTok{]}
+\KeywordTok{names}\NormalTok{(hfl_dict) <-}\StringTok{ }\KeywordTok{as.matrix}\NormalTok{(hfl_dict[}\DecValTok{1}\NormalTok{, ])}
+\NormalTok{hfl_dict <-}\StringTok{ }\NormalTok{hfl_dict[}\OperatorTok{-}\DecValTok{1}\NormalTok{, ]}
+
+\NormalTok{burden_dict <-}\StringTok{ }\NormalTok{data_dict[}\DecValTok{1}\OperatorTok{:}\DecValTok{9}\NormalTok{,}\DecValTok{7}\OperatorTok{:}\DecValTok{8}\NormalTok{]}
+\KeywordTok{names}\NormalTok{(burden_dict) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"Variable"}\NormalTok{, }\StringTok{"Description"}\NormalTok{)}
+\NormalTok{burden_dict <-}\StringTok{ }\KeywordTok{rbind}\NormalTok{(burden_dict, }
+                     \KeywordTok{names}\NormalTok{(hfl_dict), }
+                     \KeywordTok{names}\NormalTok{(bld_dict), }
+                     \KeywordTok{names}\NormalTok{(ybl_dict))}
+\NormalTok{burden_dict}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 12 x 2
+##    Variable   Description                                                       
+##    <chr>      <chr>                                                             
+##  1 UNITS      Number of occupied housing units (or households)                  
+##  2 HINCP      Average annual household income ($/year)                          
+##  3 ELEP       Original American Community Survey average household monthly elec~
+##  4 ELEP CAL   Calibrated American Community Survey average household monthly el~
+##  5 GASP       Original American Community Survey average household monthly gas ~
+##  6 GASP CAL   Calibrated American Community Survey average household monthly ga~
+##  7 GASP-U CAL Calibrated American Community Survey average household monthly ga~
+##  8 FULP       Original American Community Survey average housing unit monthly o~
+##  9 COUNT      Average number of ACS survey responses contributing to the estima~
+## 10 HFL INDEX  Primary heating fuel type                                         
+## 11 BLD INDEX  Number of units in the building                                   
+## 12 YBL INDEX  Year of building first construction
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(desired_path)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Parsed with column specification:
+## cols(
+##   `GEO ID` = col_double(),
+##   PUMA10 = col_double(),
+##   FMR = col_double(),
+##   `YBL INDEX` = col_double(),
+##   `BLD INDEX` = col_double(),
+##   `HFL INDEX` = col_double(),
+##   AMI68 = col_character(),
+##   UNITS = col_double(),
+##   HINCP = col_double(),
+##   ELEP = col_double(),
+##   `ELEP CAL` = col_double(),
+##   GASP = col_double(),
+##   `GASP CAL` = col_double(),
+##   `GASP-U CAL` = col_double(),
+##   FULP = col_double(),
+##   COUNT = col_double()
+## )
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{summary}\NormalTok{(data)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##      GEO ID              PUMA10          FMR          YBL INDEX    
+##  Min.   :3.700e+10   Min.   : 100   Min.   :37001   Min.   :0.000  
+##  1st Qu.:3.705e+10   1st Qu.:1702   1st Qu.:37051   1st Qu.:1.000  
+##  Median :3.708e+10   Median :2700   Median :37083   Median :2.000  
+##  Mean   :3.709e+10   Mean   :2713   Mean   :37088   Mean   :2.485  
+##  3rd Qu.:3.713e+10   3rd Qu.:3700   3rd Qu.:37125   3rd Qu.:4.000  
+##  Max.   :3.718e+10   Max.   :5400   Max.   :37179   Max.   :5.000  
+##    BLD INDEX       HFL INDEX        AMI68               UNITS          
+##  Min.   :0.000   Min.   :0.000   Length:1048575     Min.   :   0.0000  
+##  1st Qu.:0.000   1st Qu.:1.000   Class :character   1st Qu.:   0.0008  
+##  Median :1.000   Median :2.000   Mode  :character   Median :   0.0715  
+##  Mean   :2.501   Mean   :2.404                      Mean   :   3.1103  
+##  3rd Qu.:4.000   3rd Qu.:3.000                      3rd Qu.:   1.3725  
+##  Max.   :8.000   Max.   :8.000                      Max.   :1242.1053  
+##      HINCP             ELEP           ELEP CAL           GASP        
+##  Min.   : -7603   Min.   :  0.00   Min.   :  0.00   Min.   :  0.000  
+##  1st Qu.:     0   1st Qu.:  0.00   1st Qu.:  0.00   1st Qu.:  0.000  
+##  Median :     0   Median :  0.00   Median :  0.00   Median :  0.000  
+##  Mean   : 19286   Mean   : 66.03   Mean   : 52.23   Mean   : 19.956  
+##  3rd Qu.: 31330   3rd Qu.:130.75   3rd Qu.:103.40   3rd Qu.:  8.837  
+##  Max.   :893731   Max.   :567.08   Max.   :783.47   Max.   :527.177  
+##     GASP CAL         GASP-U CAL           FULP            COUNT        
+##  Min.   :  0.000   Min.   :  0.000   Min.   :  0.00   Min.   :  0.000  
+##  1st Qu.:  0.000   1st Qu.:  0.000   1st Qu.:  0.00   1st Qu.:  0.000  
+##  Median :  0.000   Median :  0.000   Median :  0.00   Median :  0.000  
+##  Mean   : 12.770   Mean   :  6.924   Mean   :  5.35   Mean   :  3.904  
+##  3rd Qu.:  5.377   3rd Qu.:  0.000   3rd Qu.:  0.00   3rd Qu.:  2.177  
+##  Max.   :704.908   Max.   :513.426   Max.   :329.11   Max.   :644.760
+\end{verbatim}
+
+\hypertarget{data-munging}{%
+\section{Data Munging}\label{data-munging}}
+
+Munging Steps:
+
+\begin{itemize}
+\tightlist
+\item
+  Seperate the \texttt{AMI68} column into \texttt{occupancy\_type} and
+  \texttt{income\_bracket} columns.
+\item
+  Create \texttt{min\_age} from \texttt{YBL\ INDEX}.
+\item
+  Create \texttt{min\_units} from \texttt{BLD\ INDEX}.
+\item
+  Create \texttt{detached} from \texttt{BLD\ INDEX}.
+\item
+  Create the Energy Expenditures Indicator \texttt{mean\_energy\_cost}.
+\item
+  Create the Energy Burden Indicator \texttt{mean\_energy\_burden}.
+\item
+  Remove rows where \texttt{UNITS\textless{}1},
+  \texttt{mean\_energy\_cost\textless{}0}, or
+  \texttt{HINCP\textless{}0}.
+\end{itemize}
+
+\hypertarget{break-out-ownership-income-bracket}{%
+\subsection{Break Out Ownership \& Income
+Bracket}\label{break-out-ownership-income-bracket}}
+
+The data combines the unit's ownership status (\texttt{OWNER} vs.
+\texttt{RENTER}) and income bracket as a fraction of Area Median Income
+(\texttt{0-30\%}, \texttt{30-60\%}, \texttt{60-80\%}, \texttt{80-100\%},
+or \texttt{100\%+}) into the same column (e.g.~OWNER 0-30\%). This
+\texttt{AMI68} column needs to be seperated for meaningful analysis.
+These categorical variables are saved as factors.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{#Seperate the `AMI68` column into `occupancy_type` and `income_bracket` columns}
+
+\NormalTok{data <-}\StringTok{ }\NormalTok{data }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{separate}\NormalTok{(}\DataTypeTok{col=}\StringTok{"AMI68"}\NormalTok{,}
+           \DataTypeTok{into=}\KeywordTok{c}\NormalTok{(}\StringTok{"occupancy_type"}\NormalTok{, }\StringTok{"income_bracket"}\NormalTok{), }
+           \DataTypeTok{sep =} \StringTok{" "}\NormalTok{, }
+           \DataTypeTok{remove =} \OtherTok{FALSE}\NormalTok{, }
+           \DataTypeTok{convert =} \OtherTok{FALSE}\NormalTok{,}
+           \DataTypeTok{extra =} \StringTok{"warn"}\NormalTok{, }
+           \DataTypeTok{fill =} \StringTok{"warn"}\NormalTok{)}
+
+\NormalTok{data}\OperatorTok{$}\NormalTok{occupancy_type <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(data}\OperatorTok{$}\NormalTok{occupancy_type)}
+\NormalTok{data}\OperatorTok{$}\NormalTok{income_bracket <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(data}\OperatorTok{$}\NormalTok{income_bracket)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{create-meaningful-indicators-from-indices}{%
+\subsection{Create Meaningful Indicators from
+Indices}\label{create-meaningful-indicators-from-indices}}
+
+The \texttt{YBL\ INDEX} and \texttt{BLD\ INDEX} columns need some
+further treatment. \texttt{YBL\ INDEX} represents the year the building
+was first constructed, but is an index seperated into 10-20 year
+increments dating back to 1940.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ybl_dict}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 2
+##   `YBL INDEX` `Year of building first construction`
+##   <chr>       <chr>                                
+## 1 0           2010+                                
+## 2 1           2000-09                              
+## 3 2           1980-99                              
+## 4 3           1960-79                              
+## 5 4           1940-59                              
+## 6 5           BEFORE 1940
+\end{verbatim}
+
+Since these indeces represent different possible ages and the increments
+are not uniform, I will add a numerical indicator (\texttt{min\_age}) to
+represent the youngest age the building could possibly be based on its
+category. Thus, a building in the \texttt{2010+} range must be at least
+0 years old (this data was collected in 2016), in the \texttt{1980-99}
+range at least 36 years old, in the \texttt{BEFORE\ 1940} range at least
+76, etc. I choose youngest rather than oldest age because it avoids the
+requirement to make an assumption about the oldest age of buildings
+built before 1940.
+
+For simplicity, I assume that the youngest building is 1 year old.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{#Create `min_age` from `YBL INDEX`.}
+
+\NormalTok{ybl_ranges <-}\StringTok{ }\KeywordTok{str_extract_all}\NormalTok{(ybl_dict}\OperatorTok{$}\StringTok{`}\DataTypeTok{Year of building first construction}\StringTok{`}\NormalTok{, }\StringTok{"[0-9]+"}\NormalTok{, }\DataTypeTok{simplify=}\OtherTok{TRUE}\NormalTok{)}
+\NormalTok{ybl_ranges <-}\StringTok{ }\KeywordTok{apply}\NormalTok{(ybl_ranges, }\KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{), as.numeric)}
+\NormalTok{ybl_ranges[}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{youngest_building}
+\NormalTok{ybl_ranges[}\DecValTok{6}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{ybl_ranges[}\DecValTok{6}\NormalTok{,}\DecValTok{1}\NormalTok{]}
+\NormalTok{ybl_ranges[}\DecValTok{6}\NormalTok{,}\DecValTok{1}\NormalTok{] <-}\StringTok{ }\NormalTok{oldest_building}
+\NormalTok{ybl_ranges[}\DecValTok{2}\OperatorTok{:}\DecValTok{5}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\KeywordTok{floor}\NormalTok{(ybl_ranges[}\DecValTok{2}\OperatorTok{:}\DecValTok{5}\NormalTok{,}\DecValTok{1}\NormalTok{]}\OperatorTok{/}\DecValTok{100}\NormalTok{)}\OperatorTok{*}\DecValTok{100} \OperatorTok{+}\StringTok{ }\NormalTok{ybl_ranges[}\DecValTok{2}\OperatorTok{:}\DecValTok{5}\NormalTok{,}\DecValTok{2}\NormalTok{]}
+
+\NormalTok{ybl_ranges <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(ybl_ranges)}
+\KeywordTok{names}\NormalTok{(ybl_ranges) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"min_year"}\NormalTok{, }\StringTok{"max_year"}\NormalTok{)}
+\NormalTok{ybl_ranges}\OperatorTok{$}\NormalTok{min_age <-}\StringTok{ }\NormalTok{acs_date }\OperatorTok{-}\StringTok{ }\NormalTok{ybl_ranges}\OperatorTok{$}\NormalTok{max_year}
+\NormalTok{ybl_ranges}\OperatorTok{$}\NormalTok{max_age <-}\StringTok{ }\NormalTok{acs_date }\OperatorTok{-}\StringTok{ }\NormalTok{ybl_ranges}\OperatorTok{$}\NormalTok{min_year}
+\NormalTok{ybl_dict <-}\StringTok{ }\KeywordTok{cbind}\NormalTok{(ybl_dict, ybl_ranges)}
+\NormalTok{ybl_dict}\OperatorTok{$}\StringTok{`}\DataTypeTok{YBL INDEX}\StringTok{`}\NormalTok{ <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(ybl_dict}\OperatorTok{$}\StringTok{`}\DataTypeTok{YBL INDEX}\StringTok{`}\NormalTok{)}
+
+
+\NormalTok{ybl_dict <-}\StringTok{ }\KeywordTok{rename}\NormalTok{(ybl_dict,}
+                   \DataTypeTok{year_constructed=}\StringTok{`}\DataTypeTok{Year of building first construction}\StringTok{`}\NormalTok{)}
+
+\NormalTok{ybl_dict}\OperatorTok{$}\NormalTok{year_constructed <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(ybl_dict}\OperatorTok{$}\NormalTok{year_constructed)}
+
+\NormalTok{data}\OperatorTok{$}\StringTok{`}\DataTypeTok{YBL INDEX}\StringTok{`}\NormalTok{ <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(data}\OperatorTok{$}\StringTok{`}\DataTypeTok{YBL INDEX}\StringTok{`}\NormalTok{)}
+\NormalTok{data <-}\StringTok{ }\KeywordTok{merge}\NormalTok{(data, ybl_dict[}\KeywordTok{c}\NormalTok{(}\StringTok{"YBL INDEX"}\NormalTok{,}
+                               \StringTok{"min_age"}\NormalTok{,}
+                               \StringTok{"year_constructed"}\NormalTok{)], }
+              \DataTypeTok{by =} \StringTok{"YBL INDEX"}\NormalTok{, }
+              \DataTypeTok{all.x =} \OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+Similar to building age, the variable \texttt{BLD\ INDEX} represents a
+non-uniformly distributed set of buckets for the range of
+\texttt{number\ of\ units\ in\ the\ building}, as well as whether single
+unit households are attached or detached from neighboring households. I
+will extract the minimum number of units from the range, and whether the
+building is detached.
+
+Those households labeled \texttt{OTHER\ UNIT} will be given values of
+\texttt{NA} for this characteristic.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{#Create `min_units` from `BLD INDEX` (and `max_units`).}
+\CommentTok{#Create `detached` from `BLD INDEX`.}
+
+\NormalTok{bld_ranges <-}\StringTok{ }\KeywordTok{str_extract_all}\NormalTok{(bld_dict}\OperatorTok{$}\StringTok{`}\DataTypeTok{Number of units in the building}\StringTok{`}\NormalTok{, }\StringTok{"[0-9]+"}\NormalTok{, }\DataTypeTok{simplify=}\OtherTok{TRUE}\NormalTok{)}
+
+\NormalTok{bld_ranges <-}\StringTok{ }\KeywordTok{apply}\NormalTok{(bld_ranges, }\KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{), as.numeric)}
+\NormalTok{bld_ranges[}\DecValTok{1}\OperatorTok{:}\DecValTok{3}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{bld_ranges[}\DecValTok{1}\OperatorTok{:}\DecValTok{3}\NormalTok{,}\DecValTok{1}\NormalTok{]}
+\NormalTok{bld_ranges[}\DecValTok{8}\NormalTok{,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\NormalTok{max_units}
+
+\NormalTok{bld_ranges <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(bld_ranges)}
+\KeywordTok{names}\NormalTok{(bld_ranges) <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"min_units"}\NormalTok{, }\StringTok{"max_units"}\NormalTok{)}
+
+\NormalTok{bld_ranges}\OperatorTok{$}\NormalTok{detached <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(}\KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\KeywordTok{rep}\NormalTok{(}\DecValTok{0}\NormalTok{,}\KeywordTok{nrow}\NormalTok{(bld_ranges)}\OperatorTok{-}\DecValTok{2}\NormalTok{),}\OtherTok{NA}\NormalTok{))}
+
+\NormalTok{bld_dict <-}\StringTok{ }\KeywordTok{cbind}\NormalTok{(bld_dict, bld_ranges)}
+\NormalTok{bld_dict}\OperatorTok{$}\StringTok{`}\DataTypeTok{BLD INDEX}\StringTok{`}\NormalTok{ <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(bld_dict}\OperatorTok{$}\StringTok{`}\DataTypeTok{BLD INDEX}\StringTok{`}\NormalTok{)}
+
+\NormalTok{bld_dict <-}\StringTok{ }\KeywordTok{rename}\NormalTok{(bld_dict,}
+                   \DataTypeTok{number_of_units=}\StringTok{`}\DataTypeTok{Number of units in the building}\StringTok{`}\NormalTok{)}
+
+\NormalTok{bld_dict}\OperatorTok{$}\NormalTok{number_of_units <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(bld_dict}\OperatorTok{$}\NormalTok{number_of_units)}
+
+\NormalTok{data}\OperatorTok{$}\StringTok{`}\DataTypeTok{BLD INDEX}\StringTok{`}\NormalTok{ <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(data}\OperatorTok{$}\StringTok{`}\DataTypeTok{BLD INDEX}\StringTok{`}\NormalTok{)}
+\NormalTok{data <-}\StringTok{ }\KeywordTok{merge}\NormalTok{(data, bld_dict[}\KeywordTok{c}\NormalTok{(}\StringTok{"BLD INDEX"}\NormalTok{,}
+                               \StringTok{"min_units"}\NormalTok{,}
+                               \StringTok{"detached"}\NormalTok{,}
+                               \StringTok{"number_of_units"}\NormalTok{)], }
+              \DataTypeTok{by =} \StringTok{"BLD INDEX"}\NormalTok{, }
+              \DataTypeTok{all.x =} \OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{assign-primary-heating-fuel-type}{%
+\subsection{Assign Primary Heating Fuel
+Type}\label{assign-primary-heating-fuel-type}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{hfl_dict <-}\StringTok{ }\KeywordTok{rename}\NormalTok{(hfl_dict,}
+               \DataTypeTok{primary_heating_fuel=}\StringTok{`}\DataTypeTok{Primary heating fuel type}\StringTok{`}\NormalTok{)}
+
+\NormalTok{hfl_dict}\OperatorTok{$}\NormalTok{primary_heating_fuel <-}\StringTok{ }\KeywordTok{as.factor}\NormalTok{(hfl_dict}\OperatorTok{$}\NormalTok{primary_heating_fuel)}
+
+\NormalTok{data <-}\StringTok{ }\KeywordTok{merge}\NormalTok{(data, hfl_dict[}\KeywordTok{c}\NormalTok{(}\StringTok{"HFL INDEX"}\NormalTok{,}\StringTok{"primary_heating_fuel"}\NormalTok{)], }
+              \DataTypeTok{by =} \StringTok{"HFL INDEX"}\NormalTok{, }
+              \DataTypeTok{all.x =} \OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{create-the-energy-burden-indicators}{%
+\subsection{Create the Energy Burden
+Indicators}\label{create-the-energy-burden-indicators}}
+
+Creating the final metric of average energy burden for each cohort is as
+simple as adding up the montly expenditures on electricity
+(\texttt{ELEP\ CAL}), natural gas (\texttt{GASP\ CAL}), and other fuels
+(\texttt{FULP}), and dividing this by the cohort's average monthly
+income (\texttt{HINCP\ /\ 12.0}).
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# Create the Energy Expenditures Indicator `mean_energy_cost`.}
+
+\NormalTok{data}\OperatorTok{$}\NormalTok{mean_energy_cost <-}\StringTok{ }\NormalTok{data}\OperatorTok{$}\StringTok{`}\DataTypeTok{ELEP CAL}\StringTok{`} \OperatorTok{+}\StringTok{ }\NormalTok{data}\OperatorTok{$}\StringTok{`}\DataTypeTok{GASP CAL}\StringTok{`} \OperatorTok{+}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{FULP}
+
+\CommentTok{# Create the Energy Burden Indicator `mean_energy_burden`.}
+
+\NormalTok{data}\OperatorTok{$}\NormalTok{mean_energy_burden <-}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{mean_energy_cost }\OperatorTok{/}\StringTok{ }\NormalTok{(data}\OperatorTok{$}\NormalTok{HINCP}\OperatorTok{/}\FloatTok{12.0}\NormalTok{)}
+
+\CommentTok{# Create the Energy Return on Investment Indicator `eroi`}
+
+\NormalTok{data}\OperatorTok{$}\NormalTok{mean_eroi <-}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{HINCP }\OperatorTok{/}\StringTok{ }\NormalTok{(}\DecValTok{12}\OperatorTok{*}\NormalTok{data}\OperatorTok{$}\NormalTok{mean_energy_cost)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{clean-up}{%
+\subsection{Clean-up}\label{clean-up}}
+
+\begin{itemize}
+\tightlist
+\item
+  rename variables for convenience
+\item
+  keep only what we need
+\end{itemize}
+
+Select the columns I want:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data <-}\StringTok{ }\KeywordTok{select}\NormalTok{(data,}
+               \StringTok{`}\DataTypeTok{GEO ID}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{PUMA10}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{FMR}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{occupancy_type}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{income_bracket}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{primary_heating_fuel}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{number_of_units}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{year_constructed}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{UNITS}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{HINCP}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{ELEP CAL}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{GASP CAL}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{FULP}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{COUNT}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{min_age}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{min_units}\StringTok{`}\NormalTok{, }
+               \StringTok{`}\DataTypeTok{detached}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{mean_energy_cost}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{mean_energy_burden}\StringTok{`}\NormalTok{,}
+               \StringTok{`}\DataTypeTok{mean_eroi}\StringTok{`}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+Rename columns to remove spaces:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data <-}\StringTok{ }\KeywordTok{rename}\NormalTok{(data,}
+               \DataTypeTok{geo_id=}\StringTok{`}\DataTypeTok{GEO ID}\StringTok{`}\NormalTok{,}
+               \DataTypeTok{puma10_code=}\StringTok{`}\DataTypeTok{PUMA10}\StringTok{`}\NormalTok{,}
+               \DataTypeTok{fmr_code=}\StringTok{`}\DataTypeTok{FMR}\StringTok{`}\NormalTok{,}
+               \DataTypeTok{households=}\StringTok{`}\DataTypeTok{UNITS}\StringTok{`}\NormalTok{, }
+               \DataTypeTok{acs_responses=}\StringTok{`}\DataTypeTok{COUNT}\StringTok{`}\NormalTok{,}
+               \DataTypeTok{annual_income=}\StringTok{`}\DataTypeTok{HINCP}\StringTok{`}\NormalTok{,}
+               \DataTypeTok{electricity_spend=}\StringTok{`}\DataTypeTok{ELEP CAL}\StringTok{`}\NormalTok{, }
+               \DataTypeTok{gas_spend=}\StringTok{`}\DataTypeTok{GASP CAL}\StringTok{`}\NormalTok{, }
+               \DataTypeTok{other_spend=}\StringTok{`}\DataTypeTok{FULP}\StringTok{`}\NormalTok{) }\OperatorTok{%>%}\StringTok{ }
+\StringTok{  }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{puma10_code=}\KeywordTok{as.character}\NormalTok{(puma10_code),}
+         \DataTypeTok{geo_id=}\KeywordTok{as.character}\NormalTok{(geo_id),}
+         \DataTypeTok{fmr_code=}\KeywordTok{as.character}\NormalTok{(fmr_code))}
+\end{Highlighting}
+\end{Shaded}
+
+Decompose the geo\_id into state, county, and tract codes for
+interpretibility.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data <-}\StringTok{ }\KeywordTok{separate}\NormalTok{(data,}
+                 \DataTypeTok{col=}\NormalTok{geo_id,}
+                 \DataTypeTok{into=}\KeywordTok{c}\NormalTok{(}\StringTok{"state_id"}\NormalTok{,}\StringTok{"county_id"}\NormalTok{,}\StringTok{"tract_id"}\NormalTok{),}
+                 \DataTypeTok{sep=}\KeywordTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{,}\DecValTok{5}\NormalTok{), }
+                 \DataTypeTok{remove=}\OtherTok{FALSE}\NormalTok{, }
+                 \DataTypeTok{convert=}\OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{adding-an-energy-poverty-response-variable}{%
+\subsection{Adding an Energy Poverty Response
+Variable}\label{adding-an-energy-poverty-response-variable}}
+
+For further analysis, I will add a designation of whether a cohort is,
+on average, in energy poverty depending on whether the mean energy
+burden is above 10\%.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data}\OperatorTok{$}\NormalTok{energy_poverty <-}\StringTok{ }\KeywordTok{as.logical}\NormalTok{(data}\OperatorTok{$}\NormalTok{mean_energy_burden }\OperatorTok{>}\StringTok{ }\NormalTok{energy_poverty_line)}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{remove-fractional-units}{%
+\subsection{Remove Fractional Units}\label{remove-fractional-units}}
+
+The estimation procedure used by the DOE results in an estimated number
+of occupied housing units meeting the subset characteristics
+(\texttt{UNITS}, renamed as \texttt{households}) and displays the number
+of American Community Survey responses that contribute to the estimate
+of energy expenditures (\texttt{COUNT}, renamed as
+\texttt{acs\_responses}). We first remove any categories that have fewer
+than 1 unit represented, since this is not physically possible.
+
+This results in removing 71.7064588\% of the available rows (gross:
+751896 rows of 1048575). This is a total of
+\ensuremath{9.3043075\times 10^{4}} housing units, or 2.8529144\% of the
+estimated total \ensuremath{3.2613343\times 10^{6}} units in the state.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{weird_rows <-}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{annual_income}\OperatorTok{<}\DecValTok{1} \OperatorTok{|}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{mean_energy_cost}\OperatorTok{<}\DecValTok{1}
+\CommentTok{# | data$households<1 "or those which represent les than a single housing unit "}
+\CommentTok{# | data$mean_energy_burden>1 "or energy costs greater than income"}
+\NormalTok{weird_data <-}\StringTok{ }\NormalTok{data[weird_rows,]}
+\NormalTok{data <-}\StringTok{ }\NormalTok{data[}\OperatorTok{!}\NormalTok{weird_rows,]}
+
+\NormalTok{weird_rate <-}\StringTok{ }\KeywordTok{nrow}\NormalTok{(weird_data)}\OperatorTok{/}\NormalTok{(}\KeywordTok{nrow}\NormalTok{(data)}\OperatorTok{+}\KeywordTok{nrow}\NormalTok{(weird_data))}
+\NormalTok{weird_unit_rate <-}\StringTok{ }\KeywordTok{sum}\NormalTok{(weird_data}\OperatorTok{$}\NormalTok{households)}\OperatorTok{/}\NormalTok{(}\KeywordTok{sum}\NormalTok{(data}\OperatorTok{$}\NormalTok{households)}\OperatorTok{+}\KeywordTok{sum}\NormalTok{(weird_data}\OperatorTok{$}\NormalTok{households))}
+\end{Highlighting}
+\end{Shaded}
+
+I have seperated any cohorts with incomes or energy costs less than \$1
+into another dataset for analysis. This represents approximately 3\% of
+the housing units and 53\% of the examined cohorts, so it will be
+important to make sure that this subset does not contain systematic
+bias.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{write_csv}\NormalTok{(weird_data, }\StringTok{"weird_lead.csv"}\NormalTok{)}
+\KeywordTok{write_csv}\NormalTok{(data,}\StringTok{"clean_lead.csv"}\NormalTok{)}
+
+\KeywordTok{summary}\NormalTok{(data)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##     geo_id            state_id          county_id           tract_id        
+##  Length:491368      Length:491368      Length:491368      Length:491368     
+##  Class :character   Class :character   Class :character   Class :character  
+##  Mode  :character   Mode  :character   Mode  :character   Mode  :character  
+##                                                                             
+##                                                                             
+##                                                                             
+##                                                                             
+##  puma10_code          fmr_code         occupancy_type  income_bracket  
+##  Length:491368      Length:491368      OWNER :256803   0-30%  : 91432  
+##  Class :character   Class :character   RENTER:234565   100%+  :108978  
+##  Mode  :character   Mode  :character                   30-60% : 98471  
+##                                                        60-80% : 96230  
+##                                                        80-100%: 96257  
+##                                                                        
+##                                                                        
+##   primary_heating_fuel        number_of_units      year_constructed 
+##  ELECTRICITY:210816    1 UNIT DETACHED:276507   1940-59    : 74304  
+##  UTILITY GAS:115165    OTHER UNIT     : 72714   1960-79    :122722  
+##  BOTTLED GAS: 73054    1 UNIT ATTACHED: 48004   1980-99    :139815  
+##  FUEL OIL   : 48496    5-9 UNIT       : 21535   2000-09    : 82137  
+##  WOOD       : 33840    3-4 UNIT       : 20631   2010+      : 20337  
+##  NONE       :  7610    2 UNIT         : 20064   BEFORE 1940: 52053  
+##  (Other)    :  2387    (Other)        : 31913                       
+##    households        annual_income    electricity_spend   gas_spend      
+##  Min.   :   0.0000   Min.   :     1   Min.   :  0.00    Min.   :  0.000  
+##  1st Qu.:   0.3167   1st Qu.: 19167   1st Qu.: 78.01    1st Qu.:  0.000  
+##  Median :   1.4079   Median : 32997   Median :106.98    Median :  7.181  
+##  Mean   :   6.4595   Mean   : 41054   Mean   :111.00    Mean   : 27.091  
+##  3rd Qu.:   5.0883   3rd Qu.: 49320   3rd Qu.:138.26    3rd Qu.: 41.142  
+##  Max.   :1242.1053   Max.   :893731   Max.   :783.47    Max.   :704.908  
+##                                                                          
+##   other_spend      acs_responses         min_age        min_units    
+##  Min.   :  0.000   Min.   :  0.0017   Min.   : 1.00   Min.   : 1.00  
+##  1st Qu.:  0.000   1st Qu.:  1.0000   1st Qu.:17.00   1st Qu.: 1.00  
+##  Median :  0.000   Median :  2.4950   Median :37.00   Median : 1.00  
+##  Mean   : 11.362   Mean   :  8.3046   Mean   :31.96   Mean   : 2.82  
+##  3rd Qu.:  5.282   3rd Qu.:  7.0200   3rd Qu.:57.00   3rd Qu.: 1.00  
+##  Max.   :329.107   Max.   :644.7600   Max.   :76.00   Max.   :50.00  
+##                                                       NA's   :72714  
+##  detached      mean_energy_cost  mean_energy_burden    mean_eroi       
+##  0   :142147   Min.   :  1.117   Min.   :   0.0004   Min.   :   0.001  
+##  1   :276507   1st Qu.:100.873   1st Qu.:   0.0288   1st Qu.:  11.118  
+##  NA's: 72714   Median :141.645   Median :   0.0501   Median :  19.962  
+##                Mean   :149.450   Mean   :   0.1134   Mean   :  27.787  
+##                3rd Qu.:182.144   3rd Qu.:   0.0899   3rd Qu.:  34.717  
+##                Max.   :935.561   Max.   :1034.1000   Max.   :2308.418  
+##                                                                        
+##  energy_poverty 
+##  Mode :logical  
+##  FALSE:384372   
+##  TRUE :106996   
+##                 
+##                 
+##                 
+## 
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{str}\NormalTok{(data)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## 'data.frame':    491368 obs. of  24 variables:
+##  $ geo_id              : chr  "37001020100" "37001020100" "37081012504" "37119006303" ...
+##  $ state_id            : chr  "37" "37" "37" "37" ...
+##  $ county_id           : chr  "001" "001" "081" "119" ...
+##  $ tract_id            : chr  "020100" "020100" "012504" "006303" ...
+##  $ puma10_code         : chr  "1600" "1600" "1701" "3106" ...
+##  $ fmr_code            : chr  "37001" "37001" "37081" "37119" ...
+##  $ occupancy_type      : Factor w/ 2 levels "OWNER","RENTER": 1 1 2 1 2 1 1 1 2 2 ...
+##  $ income_bracket      : Factor w/ 5 levels "0-30%","100%+",..: 5 2 3 3 2 5 5 2 5 5 ...
+##  $ primary_heating_fuel: Factor w/ 9 levels "BOTTLED GAS",..: 8 8 8 8 8 8 8 8 8 8 ...
+##  $ number_of_units     : Factor w/ 9 levels "1 UNIT ATTACHED",..: 2 2 2 2 2 2 2 2 6 2 ...
+##  $ year_constructed    : Factor w/ 6 levels "1940-59","1960-79",..: 5 5 1 6 1 1 6 4 2 1 ...
+##  $ households          : num  0.1181 2.618 0.0989 1.0301 0.2776 ...
+##  $ annual_income       : num  49484 110956 23027 20005 73417 ...
+##  $ electricity_spend   : num  120.9 100.2 89.6 98.5 97.6 ...
+##  $ gas_spend           : num  26.1 33.3 69.1 103.8 68.9 ...
+##  $ other_spend         : num  8.52e-11 8.45e-11 3.67e-01 8.48e-11 2.26 ...
+##  $ acs_responses       : num  0.75 21.25 8.32 2.31 20.82 ...
+##  $ min_age             : num  1 1 57 76 57 57 76 7 37 57 ...
+##  $ min_units           : num  1 1 1 1 1 1 1 1 3 1 ...
+##  $ detached            : Factor w/ 2 levels "0","1": 2 2 2 2 2 2 2 2 1 2 ...
+##  $ mean_energy_cost    : num  147 133 159 202 169 ...
+##  $ mean_energy_burden  : num  0.0356 0.0144 0.0829 0.1213 0.0276 ...
+##  $ mean_eroi           : num  28.05 69.27 12.06 8.24 36.24 ...
+##  $ energy_poverty      : logi  FALSE FALSE FALSE TRUE FALSE FALSE ...
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data_reloaded <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(}\KeywordTok{file.path}\NormalTok{(}\KeywordTok{getwd}\NormalTok{(),}\StringTok{"clean_lead.csv"}\NormalTok{),}
+                          \DataTypeTok{col_types=}\KeywordTok{cols}\NormalTok{(}
+                            \DataTypeTok{geo_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{state_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{county_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{tract_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{puma10_code =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{fmr_code =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{occupancy_type =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{income_bracket =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{primary_heating_fuel =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{number_of_units =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{year_constructed =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{households =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{annual_income =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{electricity_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{gas_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{other_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{acs_responses =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{min_age =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{min_units =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{detached =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{mean_energy_cost =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{mean_energy_burden =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{energy_poverty =} \KeywordTok{col_logical}\NormalTok{()}
+\NormalTok{                            ))}
+
+\KeywordTok{all}\NormalTok{(data_reloaded }\OperatorTok{==}\StringTok{ }\NormalTok{data, }\DataTypeTok{na.rm=}\OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{summary}\NormalTok{(data_reloaded)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##     geo_id            state_id          county_id           tract_id        
+##  Length:491368      Length:491368      Length:491368      Length:491368     
+##  Class :character   Class :character   Class :character   Class :character  
+##  Mode  :character   Mode  :character   Mode  :character   Mode  :character  
+##                                                                             
+##                                                                             
+##                                                                             
+##                                                                             
+##  puma10_code          fmr_code         occupancy_type  income_bracket  
+##  Length:491368      Length:491368      OWNER :256803   80-100%: 96257  
+##  Class :character   Class :character   RENTER:234565   100%+  :108978  
+##  Mode  :character   Mode  :character                   30-60% : 98471  
+##                                                        0-30%  : 91432  
+##                                                        60-80% : 96230  
+##                                                                        
+##                                                                        
+##   primary_heating_fuel        number_of_units      year_constructed 
+##  ELECTRICITY:210816    1 UNIT DETACHED:276507   2010+      : 20337  
+##  UTILITY GAS:115165    OTHER UNIT     : 72714   1940-59    : 74304  
+##  BOTTLED GAS: 73054    1 UNIT ATTACHED: 48004   BEFORE 1940: 52053  
+##  FUEL OIL   : 48496    5-9 UNIT       : 21535   2000-09    : 82137  
+##  WOOD       : 33840    3-4 UNIT       : 20631   1960-79    :122722  
+##  NONE       :  7610    2 UNIT         : 20064   1980-99    :139815  
+##  (Other)    :  2387    (Other)        : 31913                       
+##    households        annual_income    electricity_spend   gas_spend      
+##  Min.   :   0.0000   Min.   :     1   Min.   :  0.00    Min.   :  0.000  
+##  1st Qu.:   0.3167   1st Qu.: 19167   1st Qu.: 78.01    1st Qu.:  0.000  
+##  Median :   1.4079   Median : 32997   Median :106.98    Median :  7.181  
+##  Mean   :   6.4595   Mean   : 41054   Mean   :111.00    Mean   : 27.091  
+##  3rd Qu.:   5.0883   3rd Qu.: 49320   3rd Qu.:138.26    3rd Qu.: 41.142  
+##  Max.   :1242.1053   Max.   :893731   Max.   :783.47    Max.   :704.908  
+##                                                                          
+##   other_spend      acs_responses         min_age        min_units    
+##  Min.   :  0.000   Min.   :  0.0017   Min.   : 1.00   Min.   : 1.00  
+##  1st Qu.:  0.000   1st Qu.:  1.0000   1st Qu.:17.00   1st Qu.: 1.00  
+##  Median :  0.000   Median :  2.4950   Median :37.00   Median : 1.00  
+##  Mean   : 11.362   Mean   :  8.3046   Mean   :31.96   Mean   : 2.82  
+##  3rd Qu.:  5.282   3rd Qu.:  7.0200   3rd Qu.:57.00   3rd Qu.: 1.00  
+##  Max.   :329.107   Max.   :644.7600   Max.   :76.00   Max.   :50.00  
+##                                                       NA's   :72714  
+##  detached      mean_energy_cost  mean_energy_burden    mean_eroi       
+##  1   :276507   Min.   :  1.117   Min.   :   0.0004   Min.   :   0.001  
+##  0   :142147   1st Qu.:100.873   1st Qu.:   0.0288   1st Qu.:  11.118  
+##  NA's: 72714   Median :141.645   Median :   0.0501   Median :  19.962  
+##                Mean   :149.450   Mean   :   0.1134   Mean   :  27.787  
+##                3rd Qu.:182.144   3rd Qu.:   0.0899   3rd Qu.:  34.717  
+##                Max.   :935.561   Max.   :1034.1000   Max.   :2308.418  
+##                                                                        
+##  energy_poverty 
+##  Mode :logical  
+##  FALSE:384372   
+##  TRUE :106996   
+##                 
+##                 
+##                 
+## 
+\end{verbatim}
+
+\hypertarget{adding-additional-data}{%
+\section{Adding additional data}\label{adding-additional-data}}
+
+Additional features to merge from the American Community Survey:
+
+B01003\_001E Estimate!!Total TOTAL POPULATION
+
+\begin{itemize}
+\tightlist
+\item
+  Gender: Percent Non Male ++ B01001\_002E: Estimate!!Total!!Male SEX BY
+  AGE
+\item
+  Age: Median Age ++ B01002\_001E: MEDIAN AGE BY SEX
+\item
+  Wealth: Median Income ++ B06011\_001E Estimate!!Median income in the
+  past 12 months!!Total MEDIAN INCOME IN THE PAST 12 MONTHS (IN 2016
+  INFLATION-ADJUSTED DOLLARS)
+\item
+  Education: Percent with less than high school education ++
+  B06009\_002E Estimate!!Total!!Less than high school graduate PLACE OF
+  BIRTH BY EDUCATIONAL ATTAINMENT IN THE UNITED STATES
+\item
+  Race/ethnicity: Percent Non White ++ B02001\_002E
+  Estimate!!Total!!White alone RACE
+\end{itemize}
+
+Not examined in this analysis + Employment + Socioeconomic status +
+Geography + Climate + Energy Efficiency
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{library}\NormalTok{(tidycensus)}
+
+\NormalTok{acs_variables <-}\StringTok{ }\KeywordTok{list}\NormalTok{(}
+  \DataTypeTok{total_males =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B01001_002"}\NormalTok{),}
+  \DataTypeTok{total_population =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B01003_001"}\NormalTok{),}
+  \DataTypeTok{median_age =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B01002_001"}\NormalTok{),}
+  \DataTypeTok{no_high_school =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B06009_001"}\NormalTok{),}
+  \DataTypeTok{total_white =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B02001_002"}\NormalTok{),}
+  \DataTypeTok{median_income =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B06011_001"}\NormalTok{),}
+  \DataTypeTok{acs_total_households =} \KeywordTok{sym}\NormalTok{(}\StringTok{"B25001_001"}\NormalTok{)}
+\NormalTok{)}
+
+\NormalTok{acs_features <-}\StringTok{ }\KeywordTok{get_acs}\NormalTok{(}\DataTypeTok{state =} \StringTok{"NC"}\NormalTok{, }
+                    \DataTypeTok{geography =} \StringTok{"tract"}\NormalTok{,}
+                    \DataTypeTok{variables =} \KeywordTok{as.character}\NormalTok{(}\KeywordTok{unlist}\NormalTok{(acs_variables)),}
+                    \DataTypeTok{year =} \DecValTok{2016}\NormalTok{,}
+                    \DataTypeTok{output =} \StringTok{"tidy"}\NormalTok{,}
+                    \DataTypeTok{geometry =} \OtherTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Getting data from the 2012-2016 5-year ACS
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{acs_features <-}\StringTok{ }\KeywordTok{pivot_wider}\NormalTok{(acs_features, }\DataTypeTok{id_cols=}\KeywordTok{c}\NormalTok{(}\StringTok{"GEOID"}\NormalTok{),}
+                            \DataTypeTok{names_from=}\KeywordTok{c}\NormalTok{(}\StringTok{"variable"}\NormalTok{),}
+                            \DataTypeTok{values_from=}\KeywordTok{c}\NormalTok{(}\StringTok{"estimate"}\NormalTok{))}
+\NormalTok{acs_features <-}\StringTok{ }\KeywordTok{rename}\NormalTok{(acs_features, }\OperatorTok{!!!}\NormalTok{acs_variables)}
+\KeywordTok{head}\NormalTok{(acs_features)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 8
+##   GEOID total_males median_age total_population total_white no_high_school
+##   <chr>       <dbl>      <dbl>            <dbl>       <dbl>          <dbl>
+## 1 3700~        2070       38.3             4224        2461           2905
+## 2 3700~        1689       35.3             4021        1860           2582
+## 3 3700~        3381       35.1             7823        3904           4883
+## 4 3700~        2918       33.2             6861        1363           4193
+## 5 3700~        1585       42.4             3515        2345           2312
+## 6 3700~        1896       32.6             3816        1691           2311
+## # ... with 2 more variables: median_income <dbl>, acs_total_households <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{acs_features}\OperatorTok{$}\NormalTok{pct_non_male <-}\StringTok{ }\FloatTok{1.0} \OperatorTok{-}\StringTok{ }\NormalTok{acs_features}\OperatorTok{$}\NormalTok{total_males }\OperatorTok{/}\StringTok{ }\NormalTok{acs_features}\OperatorTok{$}\NormalTok{total_population}
+\NormalTok{acs_features}\OperatorTok{$}\NormalTok{pct_no_high_school <-}\StringTok{ }\NormalTok{acs_features}\OperatorTok{$}\NormalTok{no_high_school }\OperatorTok{/}\StringTok{ }\NormalTok{acs_features}\OperatorTok{$}\NormalTok{total_population}
+\NormalTok{acs_features}\OperatorTok{$}\NormalTok{pct_non_white <-}\StringTok{ }\FloatTok{1.0} \OperatorTok{-}\StringTok{ }\NormalTok{acs_features}\OperatorTok{$}\NormalTok{total_white }\OperatorTok{/}\StringTok{ }\NormalTok{acs_features}\OperatorTok{$}\NormalTok{total_population}
+
+\NormalTok{acs_features}\OperatorTok{$}\NormalTok{geo_id <-}\StringTok{ }\KeywordTok{as.numeric}\NormalTok{(acs_features}\OperatorTok{$}\NormalTok{GEOID)}
+
+\NormalTok{final_acs_variables <-}\StringTok{ }\KeywordTok{c}\NormalTok{(}\StringTok{"geo_id"}\NormalTok{,}
+                         \StringTok{"pct_non_male"}\NormalTok{,}
+                         \StringTok{"median_age"}\NormalTok{,}
+                        \StringTok{"pct_no_high_school"}\NormalTok{,}
+                        \StringTok{"pct_non_white"}\NormalTok{,}
+                        \StringTok{"median_income"}\NormalTok{,}
+                        \StringTok{"acs_total_households"}\NormalTok{)}
+
+\NormalTok{data <-}\StringTok{ }\KeywordTok{left_join}\NormalTok{(data, }\KeywordTok{select}\NormalTok{(acs_features, final_acs_variables) }\OperatorTok{%>%}\StringTok{ }\KeywordTok{mutate}\NormalTok{(}\DataTypeTok{geo_id=}\KeywordTok{as.character}\NormalTok{(geo_id)), }\DataTypeTok{by=}\StringTok{"geo_id"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Note: Using an external vector in selections is ambiguous.
+## i Use `all_of(final_acs_variables)` instead of `final_acs_variables` to silence this message.
+## i See <https://tidyselect.r-lib.org/reference/faq-external-vector.html>.
+## This message is displayed once per session.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{write_csv}\NormalTok{(data,}\StringTok{"clean_lead.csv"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data_reloaded <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(}\KeywordTok{file.path}\NormalTok{(}\KeywordTok{getwd}\NormalTok{(),}\StringTok{"clean_lead.csv"}\NormalTok{),}
+                          \DataTypeTok{col_types=}\KeywordTok{cols}\NormalTok{(}
+                            \DataTypeTok{geo_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{state_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{county_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{tract_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{puma10_code =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{fmr_code =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{occupancy_type =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{income_bracket =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{primary_heating_fuel =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{number_of_units =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{year_constructed =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{households =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{annual_income =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{electricity_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{gas_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{other_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{acs_responses =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{min_age =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{min_units =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{detached =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{mean_energy_cost =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{mean_energy_burden =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{energy_poverty =} \KeywordTok{col_logical}\NormalTok{(),}
+                            \DataTypeTok{pct_non_male =} \KeywordTok{col_double}\NormalTok{(), }
+                            \DataTypeTok{median_age =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{pct_no_high_school =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{pct_non_white =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{median_income =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{acs_total_households =} \KeywordTok{col_double}\NormalTok{()}
+\NormalTok{                            ))}
+
+\KeywordTok{all}\NormalTok{(data_reloaded }\OperatorTok{==}\StringTok{ }\NormalTok{data, }\DataTypeTok{na.rm=}\OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{summary}\NormalTok{(data_reloaded)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##     geo_id            state_id          county_id           tract_id        
+##  Length:491368      Length:491368      Length:491368      Length:491368     
+##  Class :character   Class :character   Class :character   Class :character  
+##  Mode  :character   Mode  :character   Mode  :character   Mode  :character  
+##                                                                             
+##                                                                             
+##                                                                             
+##                                                                             
+##  puma10_code          fmr_code         occupancy_type  income_bracket  
+##  Length:491368      Length:491368      OWNER :256803   80-100%: 96257  
+##  Class :character   Class :character   RENTER:234565   100%+  :108978  
+##  Mode  :character   Mode  :character                   30-60% : 98471  
+##                                                        0-30%  : 91432  
+##                                                        60-80% : 96230  
+##                                                                        
+##                                                                        
+##   primary_heating_fuel        number_of_units      year_constructed 
+##  ELECTRICITY:210816    1 UNIT DETACHED:276507   2010+      : 20337  
+##  UTILITY GAS:115165    OTHER UNIT     : 72714   1940-59    : 74304  
+##  BOTTLED GAS: 73054    1 UNIT ATTACHED: 48004   BEFORE 1940: 52053  
+##  FUEL OIL   : 48496    5-9 UNIT       : 21535   2000-09    : 82137  
+##  WOOD       : 33840    3-4 UNIT       : 20631   1960-79    :122722  
+##  NONE       :  7610    2 UNIT         : 20064   1980-99    :139815  
+##  (Other)    :  2387    (Other)        : 31913                       
+##    households        annual_income    electricity_spend   gas_spend      
+##  Min.   :   0.0000   Min.   :     1   Min.   :  0.00    Min.   :  0.000  
+##  1st Qu.:   0.3167   1st Qu.: 19167   1st Qu.: 78.01    1st Qu.:  0.000  
+##  Median :   1.4079   Median : 32997   Median :106.98    Median :  7.181  
+##  Mean   :   6.4595   Mean   : 41054   Mean   :111.00    Mean   : 27.091  
+##  3rd Qu.:   5.0883   3rd Qu.: 49320   3rd Qu.:138.26    3rd Qu.: 41.142  
+##  Max.   :1242.1053   Max.   :893731   Max.   :783.47    Max.   :704.908  
+##                                                                          
+##   other_spend      acs_responses         min_age        min_units    
+##  Min.   :  0.000   Min.   :  0.0017   Min.   : 1.00   Min.   : 1.00  
+##  1st Qu.:  0.000   1st Qu.:  1.0000   1st Qu.:17.00   1st Qu.: 1.00  
+##  Median :  0.000   Median :  2.4950   Median :37.00   Median : 1.00  
+##  Mean   : 11.362   Mean   :  8.3046   Mean   :31.96   Mean   : 2.82  
+##  3rd Qu.:  5.282   3rd Qu.:  7.0200   3rd Qu.:57.00   3rd Qu.: 1.00  
+##  Max.   :329.107   Max.   :644.7600   Max.   :76.00   Max.   :50.00  
+##                                                       NA's   :72714  
+##  detached      mean_energy_cost  mean_energy_burden    mean_eroi       
+##  1   :276507   Min.   :  1.117   Min.   :   0.0004   Min.   :   0.001  
+##  0   :142147   1st Qu.:100.873   1st Qu.:   0.0288   1st Qu.:  11.118  
+##  NA's: 72714   Median :141.645   Median :   0.0501   Median :  19.962  
+##                Mean   :149.450   Mean   :   0.1134   Mean   :  27.787  
+##                3rd Qu.:182.144   3rd Qu.:   0.0899   3rd Qu.:  34.717  
+##                Max.   :935.561   Max.   :1034.1000   Max.   :2308.418  
+##                                                                        
+##  energy_poverty   pct_non_male       median_age    pct_no_high_school
+##  Mode :logical   Min.   :0.03872   Min.   :18.70   Min.   :0.02061   
+##  FALSE:384372    1st Qu.:0.49504   1st Qu.:35.30   1st Qu.:0.64930   
+##  TRUE :106996    Median :0.51667   Median :40.50   Median :0.69324   
+##                  Mean   :0.51543   Mean   :40.07   Mean   :0.68497   
+##                  3rd Qu.:0.53682   3rd Qu.:44.40   3rd Qu.:0.72900   
+##                  Max.   :0.64745   Max.   :66.90   Max.   :0.99296   
+##                                                                      
+##  pct_non_white    median_income   acs_total_households
+##  Min.   :0.0000   Min.   : 2499   Min.   :   3        
+##  1st Qu.:0.1095   1st Qu.:20143   1st Qu.:1518        
+##  Median :0.2412   Median :23608   Median :1997        
+##  Mean   :0.3049   Mean   :25324   Mean   :2100        
+##  3rd Qu.:0.4582   3rd Qu.:29054   3rd Qu.:2587        
+##  Max.   :0.9970   Max.   :94750   Max.   :7194        
+## 
+\end{verbatim}
+
+\hypertarget{bring-in-electric-service-provider-data}{%
+\subsection{Bring in Electric Service Provider
+Data}\label{bring-in-electric-service-provider-data}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{erst <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(}\KeywordTok{file.path}\NormalTok{(}\KeywordTok{getwd}\NormalTok{(),}\StringTok{"clean_erst.csv"}\NormalTok{),}
+                          \DataTypeTok{col_types=}\KeywordTok{cols}\NormalTok{(}
+                            \DataTypeTok{tract_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{utility_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{percent_tract_served =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{tract_households_served =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{utility_name =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{ownership_type =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(}\OtherTok{NULL}\NormalTok{),}
+                            \DataTypeTok{balancing_authority =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(}\OtherTok{NULL}\NormalTok{),}
+                            \DataTypeTok{retail_revenue_thousands =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{retail_sales_MWh =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{retail_customers =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{implied_price_kWh =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{revenue_per_customer =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{()))}
+
+\NormalTok{data <-}\StringTok{ }\KeywordTok{left_join}\NormalTok{(data, erst, }\DataTypeTok{by=}\StringTok{"tract_id"}\NormalTok{)}
+
+
+\CommentTok{# Calculate implied electricity usage}
+\NormalTok{data}\OperatorTok{$}\NormalTok{implied_electricity_use <-}\StringTok{ }\NormalTok{data}\OperatorTok{$}\NormalTok{electricity_spend}\OperatorTok{/}\NormalTok{data}\OperatorTok{$}\NormalTok{implied_price_kWh}
+
+\KeywordTok{write_csv}\NormalTok{(data, }\StringTok{"clean_lead.csv"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data_reloaded <-}\StringTok{ }\KeywordTok{read_csv}\NormalTok{(}\KeywordTok{file.path}\NormalTok{(}\KeywordTok{getwd}\NormalTok{(),}\StringTok{"clean_lead.csv"}\NormalTok{),}
+                          \DataTypeTok{col_types=}\KeywordTok{cols}\NormalTok{(}
+                            \DataTypeTok{geo_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{state_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{county_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{tract_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{puma10_code =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{fmr_code =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{occupancy_type =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{income_bracket =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{primary_heating_fuel =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{number_of_units =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{year_constructed =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{households =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{annual_income =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{electricity_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{gas_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{other_spend =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{acs_responses =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{min_age =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{min_units =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{detached =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(}\OtherTok{NULL}\NormalTok{),}
+                            \DataTypeTok{mean_energy_cost =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{mean_energy_burden =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{energy_poverty =} \KeywordTok{col_logical}\NormalTok{(),}
+                            \DataTypeTok{pct_non_male =} \KeywordTok{col_double}\NormalTok{(), }
+                            \DataTypeTok{median_age =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{pct_no_high_school =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{pct_non_white =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{median_income =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{acstotal_households =} \KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{utility_id =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(),}
+                            \DataTypeTok{percent_tract_served =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{tract_households_served =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{utility_name =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_character}\NormalTok{(),}
+                            \DataTypeTok{ownership_type =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(}\OtherTok{NULL}\NormalTok{),}
+                            \DataTypeTok{balancing_authority =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_factor}\NormalTok{(}\OtherTok{NULL}\NormalTok{),}
+                            \DataTypeTok{retail_revenue_thousands =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{retail_sales_MWh =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{retail_customers =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{implied_price_kWh =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{revenue_per_customer =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{(),}
+                            \DataTypeTok{implied_electricity_use =}\NormalTok{ readr}\OperatorTok{::}\KeywordTok{col_double}\NormalTok{()))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Warning: The following named parsers don't match the column names:
+## acstotal_households
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{all}\NormalTok{(data_reloaded }\OperatorTok{==}\StringTok{ }\NormalTok{data, }\DataTypeTok{na.rm=}\OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{summary}\NormalTok{(data_reloaded)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##     geo_id            state_id          county_id           tract_id        
+##  Length:1365556     Length:1365556     Length:1365556     Length:1365556    
+##  Class :character   Class :character   Class :character   Class :character  
+##  Mode  :character   Mode  :character   Mode  :character   Mode  :character  
+##                                                                             
+##                                                                             
+##                                                                             
+##                                                                             
+##  puma10_code          fmr_code         occupancy_type  income_bracket  
+##  Length:1365556     Length:1365556     OWNER :700949   80-100%:266662  
+##  Class :character   Class :character   RENTER:664607   100%+  :302307  
+##  Mode  :character   Mode  :character                   30-60% :271988  
+##                                                        0-30%  :259493  
+##                                                        60-80% :265106  
+##                                                                        
+##                                                                        
+##   primary_heating_fuel        number_of_units      year_constructed 
+##  ELECTRICITY:569360    1 UNIT DETACHED:770295   2010+      : 50835  
+##  UTILITY GAS:292705    OTHER UNIT     :222582   1940-59    :216102  
+##  BOTTLED GAS:219684    1 UNIT ATTACHED:116561   BEFORE 1940:160233  
+##  FUEL OIL   :149508    2 UNIT         : 62636   2000-09    :214927  
+##  WOOD       :105016    3-4 UNIT       : 60241   1960-79    :345927  
+##  NONE       : 21431    5-9 UNIT       : 54948   1980-99    :377532  
+##  (Other)    :  7852    (Other)        : 78293                       
+##    households        annual_income    electricity_spend   gas_spend      
+##  Min.   :   0.0000   Min.   :     1   Min.   :  0.00    Min.   :  0.000  
+##  1st Qu.:   0.3122   1st Qu.: 18363   1st Qu.: 77.81    1st Qu.:  0.000  
+##  Median :   1.3920   Median : 31636   Median :107.31    Median :  6.614  
+##  Mean   :   6.0122   Mean   : 39411   Mean   :111.66    Mean   : 27.825  
+##  3rd Qu.:   4.9863   3rd Qu.: 47147   3rd Qu.:139.66    3rd Qu.: 41.554  
+##  Max.   :1242.1053   Max.   :893731   Max.   :783.47    Max.   :704.908  
+##                                                                          
+##   other_spend      acs_responses         min_age        min_units     
+##  Min.   :  0.000   Min.   :  0.0017   Min.   : 1.00   Min.   : 1.00   
+##  1st Qu.:  0.000   1st Qu.:  1.0000   1st Qu.:17.00   1st Qu.: 1.00   
+##  Median :  0.000   Median :  2.4393   Median :37.00   Median : 1.00   
+##  Mean   : 12.463   Mean   :  7.8419   Mean   :33.15   Mean   : 2.68   
+##  3rd Qu.:  7.431   3rd Qu.:  6.8040   3rd Qu.:57.00   3rd Qu.: 1.00   
+##  Max.   :329.107   Max.   :644.7600   Max.   :76.00   Max.   :50.00   
+##                                                       NA's   :222582  
+##  detached      mean_energy_cost  mean_energy_burden    mean_eroi       
+##  1   :770295   Min.   :  1.117   Min.   :   0.0004   Min.   :   0.001  
+##  0   :372679   1st Qu.:101.826   1st Qu.:   0.0302   1st Qu.:  10.511  
+##  NA's:222582   Median :143.359   Median :   0.0531   Median :  18.830  
+##                Mean   :151.946   Mean   :   0.1227   Mean   :  26.501  
+##                3rd Qu.:186.354   3rd Qu.:   0.0951   3rd Qu.:  33.116  
+##                Max.   :935.561   Max.   :1034.1000   Max.   :2308.418  
+##                                                                        
+##  energy_poverty   pct_non_male       median_age    pct_no_high_school
+##  Mode :logical   Min.   :0.03872   Min.   :18.70   Min.   :0.02061   
+##  FALSE:1045150   1st Qu.:0.49328   1st Qu.:36.00   1st Qu.:0.65664   
+##  TRUE :320406    Median :0.51518   Median :41.10   Median :0.69957   
+##                  Mean   :0.51346   Mean   :40.47   Mean   :0.68911   
+##                  3rd Qu.:0.53682   3rd Qu.:45.30   3rd Qu.:0.73259   
+##                  Max.   :0.64745   Max.   :66.90   Max.   :0.99296   
+##                                                                      
+##  pct_non_white    median_income   acs_total_households   utility_id    
+##  Min.   :0.0000   Min.   : 2499   Min.   :   3         31     :525914  
+##  1st Qu.:0.1096   1st Qu.:19126   1st Qu.:1534         34     :239779  
+##  Median :0.2703   Median :22243   Median :2061         22     : 99228  
+##  Mean   :0.3171   Mean   :23552   Mean   :2154         27     : 63552  
+##  3rd Qu.:0.4692   3rd Qu.:26190   3rd Qu.:2721         12     : 50394  
+##  Max.   :0.9970   Max.   :94750   Max.   :7194         (Other):380235  
+##                                                        NA's   :  6454  
+##  tract_households_served percent_tract_served utility_name      
+##  Min.   :  35            Min.   :0.1316       Length:1365556    
+##  1st Qu.:2420            1st Qu.:0.2655       Class :character  
+##  Median :3296            Median :0.4227       Mode  :character  
+##  Mean   :3528            Mean   :0.4871                         
+##  3rd Qu.:4279            3rd Qu.:0.6355                         
+##  Max.   :9756            Max.   :1.0000                         
+##                                                                 
+##         ownership_type   balancing_authority retail_revenue_thousands
+##  Cooperative   :526578   DUK :470107         Min.   :   1563         
+##  Investor Owned:806052   CPLE:728764         1st Qu.:  51736         
+##  Municipal     : 25920   PJM :152473         Median :1700964         
+##  NA's          :  7006   TVA :  7206         Mean   :1087812         
+##                          NA's:  7006         3rd Qu.:1700964         
+##                                              Max.   :2251968         
+##                                              NA's   :7006            
+##  retail_sales_MWh   retail_customers  implied_price_kWh revenue_per_customer
+##  Min.   :   12288   Min.   :   1295   Min.   :0.102     Min.   :0.001       
+##  1st Qu.:  410152   1st Qu.:  33551   1st Qu.:0.108     1st Qu.:0.001       
+##  Median :15785056   Median :1162473   Median :0.108     Median :0.001       
+##  Mean   :10201971   Mean   : 764948   Mean   :0.113     Mean   :0.002       
+##  3rd Qu.:15785056   3rd Qu.:1162473   3rd Qu.:0.124     3rd Qu.:0.002       
+##  Max.   :21615228   Max.   :1669923   Max.   :0.146     Max.   :0.002       
+##  NA's   :7006       NA's   :7006      NA's   :7006      NA's   :7006        
+##  implied_electricity_use
+##  Min.   :   0.0         
+##  1st Qu.: 685.6         
+##  Median : 945.8         
+##  Mean   : 989.9         
+##  3rd Qu.:1232.8         
+##  Max.   :7270.6         
+##  NA's   :7006
+\end{verbatim}
+
+\end{document}

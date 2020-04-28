@@ -1,0 +1,823 @@
+---
+title: 'Data Munging: Electric Retail Service Territories'
+author: "Eric Scheier"
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(rgdal)
+library(maps)
+library(tigris)
+library(tidycensus)
+library(readxl)
+
+options(tigris_use_cache = FALSE)
+
+```
+# Introduction
+
+# Acquiring Data
+
+```{r}
+# https://hifld-geoplatform.opendata.arcgis.com/datasets/c4fd0b01c2544a2f83440dab292f0980_0
+erst_name <- "Electric_Retail_Service_Territories"
+
+url_list <- list(
+  "csv" = "https://opendata.arcgis.com/datasets/c4fd0b01c2544a2f83440dab292f0980_0.csv?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D",
+  "kml" = "https://opendata.arcgis.com/datasets/c4fd0b01c2544a2f83440dab292f0980_0.kml?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D",
+  "zip" = "https://opendata.arcgis.com/datasets/c4fd0b01c2544a2f83440dab292f0980_0.zip?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D",
+  "gdb" = "https://opendata.arcgis.com/datasets/c4fd0b01c2544a2f83440dab292f0980_0.gdb?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D")
+
+for (i in 1:length(url_list)){
+  file_name <- names(url_list)[i]
+  data_url <- url_list[[file_name]]
+  desired_name <- paste0(erst_name,".",file_name)
+  desired_path <- file.path(desired_name)
+  
+  if (!file.exists(desired_path)){
+    print(paste0("Downloading ",desired_name))
+    download.file(data_url,desired_path)
+    if (file_name=="zip"){
+      unzip(desired_path)
+    }
+  }
+}
+```
+
+
+```{r}
+data_shp <- st_read(paste0(erst_name,".shp"))
+
+# https://gis.stackexchange.com/questions/64654/choosing-the-correct-value-for-proj4string-for-shapefile-reading-in-r
+#shp <- st_transform(shp, "+init=epsg:3857")
+
+summary(data_shp)
+```
+
+```{r}
+str(data_shp)
+```
+
+```{r}
+#plot(data_shp$geometry)
+```
+
+
+```{r}
+data <- data_shp %>% st_drop_geometry()
+
+str(data)
+```
+
+
+# Data Munging
+
+Munging Steps:
+
++ Limit to North Carolina Utilities
++ Replace `-999999` with `NA`
+
+## Limit to NC Utilities
+
+For now I will limit by the state name of the serving utility. Soon, I will select by those territories which overlap with the NC state boundary.
+
+```{r}
+#plot(data_shp$geometry[data$STATE=="NC" & data$TYPE=="INVESTOR OWNED"])
+```
+
+## Reclassify `STATE` and `MUNICIPAL MARKETING AUTHORITIES` as `MUNICUPAL` service providers
+
+```{r}
+#plot(counties$geometry)
+#counties <- st_as_sf(map("county", plot = FALSE, fill = TRUE))
+#counties <- subset(counties, grepl("north carolina", counties$ID))
+
+
+#plot(states$geometry)
+#states <- st_as_sf(map("state", plot=FALSE, fill=TRUE))
+#states <- subset(states, grepl("north carolina", states$ID))
+
+#block_groups
+bgs <- block_groups(cb = TRUE, year = 2016, class="sf", state="NC", refresh=TRUE)
+bgs <- st_transform(bgs, crs=st_crs(data_shp))
+#plot(bgs$geometry)
+
+mean_bg_area <- st_area(bgs) %>% mean()
+
+#tracts
+census_tracts <- tracts(cb = TRUE, year = 2016, class="sf", state="NC", refresh=TRUE)
+census_tracts <- st_transform(census_tracts, crs=st_crs(data_shp))
+#plot(census_tracts$geometry)
+
+#zctas
+
+#counties
+counties <- counties(state = 'NC', cb = FALSE, year=2016, resolution = "500k", class="sf", refresh=TRUE)
+counties <- st_transform(counties, crs=st_crs(data_shp))
+
+#state
+states <- states(cb = FALSE, resolution = "500k", year = 2016, class="sf", refresh=TRUE)
+states <- subset(states, GEOID=="37")
+states <- st_transform(states, crs=st_crs(data_shp))
+```
+
+```{r}
+nc_shp <- st_intersection(data_shp, states)
+#plot(nc_shp$geometry)
+```
+
+
+
+```{r}
+nc_shp %>% filter(TYPE=="MUNICIPAL MKTG AUTHORITY") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+```{r}
+nc_shp %>% filter(TYPE=="STATE") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+```{r}
+nc_shp %>% filter(TYPE=="MUNICIPAL") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+
+```{r}
+muni_sources <- c("EIA 861, https://www.tva.gov/file_source/TVA/Site%20Content/Energy/tva_lpc_map.pdf",
+             "EIA 861, Urban Areas - Cartographic Boundary Shapefiles - U.S. Census",
+             "FERC 714, EIA 861, Urban Areas - Cartographic Boundary Shapefiles - U.S. Census",
+             "EIA 860, EIA 861, Urban Areas - Cartographic Boundary Shapefiles - U.S. Census")
+nc_shp %>% filter(TYPE=="MUNICIPAL" & SOURCE %in% muni_sources) %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+
+
+```{r}
+nc_shp %>% filter(TYPE=="COOPERATIVE") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+```{r}
+not_coop_sources <- c("FERC 714, EIA 861, TIGER/Line Shapefiles - U.S. Census, https://www.electric.coop/wp-content/uploads/2018/09/South_Carolina_Coops-1024x791.png",
+                      "EIA 861, TIGER/Line Shapefiles - U.S. Census, https://www.electric.coop/information-hub-electric-co-ops-hurricane-michael/")
+nc_shp %>% filter(TYPE=="COOPERATIVE" & !(SOURCE %in% not_coop_sources)) %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+
+```{r}
+nc_shp %>% filter(TYPE=="INVESTOR OWNED") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+```{r}
+nc_shp %>% filter(TYPE=="INVESTOR OWNED") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=NAME, alpha=.2), color=NA) + 
+  geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+```
+
+
+```{r}
+# Territory types not applicable to North Carolina
+## FEDERAL
+## POLITICAL SUBDIVISION
+## NOT AVAILABLE
+## WHOLESALE POWER MARKETER
+# nc_shp %>% filter(TYPE=="") %>% 
+#   ggplot() + 
+#   geom_sf(aes(fill=SOURCE, alpha=.2), color=NA) + 
+#   geom_sf(data = counties, fill = NA, color = "black") + 
+#   coord_sf(crs = 4326) + 
+#   theme(legend.position="bottom") + 
+#   guides(fill = guide_legend(ncol = 1))
+```
+
+Select relevant utilities based on analysis above
+
+
+```{r}
+nc_shp %>% filter((TYPE=="MUNICIPAL" & SOURCE %in% muni_sources) | 
+                                 (TYPE=="COOPERATIVE" & !(SOURCE %in% not_coop_sources)) | 
+                                 (TYPE=="INVESTOR OWNED")) %>% 
+  ggplot() + 
+  geom_sf(aes(fill=TYPE, alpha=.2), color=NA) + 
+  #geom_sf(data = counties, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position="bottom") + 
+  guides(fill = guide_legend(ncol = 1))
+  
+```
+
+```{r}
+nc_clean_shp <- subset(nc_shp, (TYPE=="MUNICIPAL" & SOURCE %in% muni_sources) | 
+                                 (TYPE=="COOPERATIVE" & !(SOURCE %in% not_coop_sources)) | 
+                                 (TYPE=="INVESTOR OWNED"))
+```
+
+```{r}
+nc_clean_shp %>% 
+  ggplot() + 
+  geom_sf(aes(fill=NAME, alpha=.2), color=NA) + 
+  geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) +
+  theme(legend.position = "none")
+  #theme(legend.position="bottom") + 
+  #guides(fill = guide_legend(ncol = 1))
+```
+
+## Flatten the service territories for each provider type
+
+#### Function to assign overlapping areas
+
+```{r}
+nc_clean_shp %>% filter(TYPE=="INVESTOR OWNED") %>% #st_sf() %>% 
+  st_buffer(dist = 0) %>% 
+  ggplot() + 
+  geom_sf(aes(fill=ID, alpha=.2), color=NA) + 
+  geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+# https://github.com/r-spatial/sf/issues/824
+st_no_overlap <- function(polygons) {
+  
+  #independent <- b %>% st_sf %>% st_intersection %>% subset(n.overlaps<=1) %>% st_cast("POLYGON")
+  #overlap <- b %>% st_sf %>% st_intersection %>% subset(n.overlaps>1) %>% st_union()
+  
+  centroids <- polygons %>% st_centroid
+
+     # Voronoi tesselation
+     voronoi <- 
+          centroids %>% 
+          st_geometry() %>%
+          st_union() %>%
+          st_voronoi() %>%
+          st_collection_extract()
+     
+     # Put them back in their original order
+     voronoi <-
+          voronoi[unlist(st_intersects(centroids,voronoi))]
+
+     # Keep the attributes
+     result <- centroids
+     
+     # Intersect voronoi zones with buffer zones
+     st_geometry(result) <-
+          mapply(function(x,y) st_intersection(x,y),
+                 #st_buffer(st_geometry(centroids),dist), 
+                 polygons$geometry,
+                 voronoi,
+                 SIMPLIFY=FALSE) %>%
+          st_sfc(crs=st_crs(centroids))
+
+     result
+}
+
+unoverlap_territories <- function(territories, min_area){
+  all_polygons <- territories %>% st_cast("MULTIPOLYGON") %>% st_cast("POLYGON") %>% 
+    st_buffer(dist = 0) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  
+  all_polygons <- all_polygons[st_area(all_polygons)>min_area,,drop=FALSE]
+  
+  final_b <- st_no_overlap(all_polygons)
+  
+  independent <- all_polygons %>% st_sf %>% st_intersection %>% subset(n.overlaps<=1) %>% 
+    st_cast("MULTIPOLYGON") %>% st_cast("POLYGON") %>% st_buffer(dist = 0) %>% 
+    st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  
+  # combine by ID
+  combined_territories <- rbind(independent %>% select(names(final_b)), final_b)
+  
+  # merge independent with final_b by ID
+  merged_territories <- combined_territories %>% group_by(ID) %>% 
+    summarize() %>% ungroup() %>% st_buffer(dist = 0) %>% 
+    st_set_precision(1e5) %>% lwgeom::st_make_valid() %>% 
+    st_difference() %>% st_intersection() %>% 
+    subset(n.overlaps==1)
+  
+  nice_merged_territories <- merged_territories %>% st_buffer(dist = 0) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  
+  
+  return(nice_merged_territories)
+}
+
+#overlap <- all_polygons %>% st_sf %>% st_intersection %>% subset(n.overlaps>1) %>% st_union()
+
+# abort if there are no overlaps
+#if(identical(as.numeric(st_area(overlap)), numeric(0))){
+#  return(b)
+#}
+```
+
+### IOUs
+
+```{r}
+min_area <- st_area(bgs) %>% mean #median
+
+iou_shp <- nc_clean_shp %>% filter(TYPE=="INVESTOR OWNED") %>% st_buffer(dist = 0)
+
+nice_ious <- unoverlap_territories(territories = iou_shp,
+                                   min_area = min_area)
+```
+
+
+```{r}
+nice_ious %>% 
+  ggplot() + 
+  geom_sf(aes(fill=ID, alpha=.2), color="red") + 
+  #geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "bottom")
+```
+
+### Muni's
+
+
+```{r}
+nc_clean_shp %>% filter(TYPE=="MUNICIPAL") %>% 
+  ggplot() + 
+  geom_sf(aes(fill=NAME, alpha=.2), color=NA) + 
+  geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  #theme(legend.position = "none")
+  theme(legend.position="bottom")# + 
+  #guides(fill = guide_legend(ncol = 1))
+```
+
+```{r}
+muni_shp <- nc_clean_shp %>% filter(TYPE=="MUNICIPAL") %>% st_buffer(dist = 0)
+
+nice_munis <- unoverlap_territories(territories = muni_shp,
+                                   min_area = min_area)
+```
+
+
+```{r}
+nice_munis %>% 
+  ggplot() + 
+  geom_sf(aes(fill=ID, alpha=.2), color="red") + 
+  #geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "bottom")
+```
+
+
+### Coops
+
+```{r}
+nc_clean_shp %>% filter(TYPE=="COOPERATIVE") %>% #st_sf() %>% 
+  st_buffer(dist = 0) %>% 
+  ggplot() + 
+  geom_sf(aes(fill=NAME, alpha=.2), color=NA) + 
+  geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  #theme(legend.position = "none")
+  theme(legend.position="bottom")# + 
+  #guides(fill = guide_legend(ncol = 1))
+```
+
+```{r}
+coop_shp <- nc_clean_shp %>% filter(TYPE=="COOPERATIVE") %>% st_buffer(dist = 0)
+
+nice_coops <- unoverlap_territories(territories = coop_shp,
+                                   min_area = min_area)
+```
+
+
+```{r}
+nice_coops %>% 
+  ggplot() + 
+  geom_sf(aes(fill=ID, alpha=.2), color="red") + 
+  #geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "bottom")
+```
+
+
+### Combine All Territories Together
+
+```{r}
+combine_territories <- function(t_front, t_back){
+  t_front_polygons <- t_front %>% st_cast("MULTIPOLYGON") %>% st_cast("POLYGON") %>% 
+    st_buffer(dist = 0) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  
+  t_back_polygons <- t_back %>% st_cast("MULTIPOLYGON") %>% st_cast("POLYGON") %>% 
+    st_buffer(dist = 0) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  #final_b <- st_no_overlap(all_polygons)
+  #final_b <- st_intersect()
+  
+  back_independent <- st_difference(st_union(t_back_polygons), st_union(t_front_polygons))# %>% 
+    #st_cast("MULTIPOLYGON") %>% st_cast("POLYGON")
+  
+  t_back_independent <- st_intersection(t_back_polygons, back_independent) %>% 
+    subset(n.overlaps<=1) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid() %>% st_buffer(dist = 0)
+    #st_intersection(t_back_polygons, st_difference(st_union(t_back_polygons), st_union(t_front_polygons))) %>% 
+    #subset(n.overlaps<=1)# %>% 
+    #st_cast("MULTIPOLYGON") %>% st_cast("POLYGON") %>% 
+    #st_buffer(dist = 0) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  
+  # combine by ID
+  combined_territories <- rbind(t_back_independent %>% select(names(t_front)), t_front)
+  
+  # merge independent with final_b by ID
+  merged_territories <- combined_territories %>% group_by(ID) %>% 
+    summarize() %>% ungroup() %>% st_buffer(dist = 0) %>% 
+    st_set_precision(1e5) %>% lwgeom::st_make_valid() %>% 
+    st_difference() %>% st_intersection() %>% 
+    subset(n.overlaps==1)
+  
+  nice_merged_territories <- merged_territories %>% st_buffer(dist = 0) %>% st_set_precision(1e5) %>%  lwgeom::st_make_valid()
+  
+  
+  return(nice_merged_territories)
+}
+
+combined_muni_coops <- combine_territories(nice_munis, nice_coops)
+combined_coop_ious <- combine_territories(nice_coops, nice_ious)
+
+#full_combine <- combine_territories(combined_muni_coops, nice_ious)
+full_combine <- combine_territories(nice_munis, combined_coop_ious)
+```
+
+
+```{r}
+full_combine %>% 
+  ggplot() + 
+  geom_sf(aes(fill=ID, alpha=.2), color=NA) + 
+  #geom_sf(data=nice_munis, aes(fill=ID, alpha=.2), color="green") + 
+  #geom_sf(data = states, fill = NA, color = "black") + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "bottom")
+```
+
+```{r}
+st_write(full_combine, "full_combined_ersts.geojson", delete_dsn = TRUE)
+```
+
+
+## Assign each census block group to a service territory
+
+```{r}
+ggplot() + 
+  geom_sf(data=full_combine, aes(fill=ID, alpha=.2), color=NA) + 
+  geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+block_group_utilities <- st_join(bgs, full_combine, left=TRUE, largest=TRUE)
+```
+
+
+```{r}
+ggplot() + 
+  geom_sf(data=block_group_utilities, aes(fill=ID, alpha=.2), color=NA) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+st_write(block_group_utilities, "block_group_utilities.geojson", delete_dsn = TRUE)
+```
+
+
+```{r}
+# B00002_001E	Estimate!!Total	UNWEIGHTED SAMPLE HOUSING UNITS
+# B25001_001E	Estimate!!Total	HOUSING UNITS
+
+# housing_density <- get_acs(state = "NC",
+#                            geography = "block group",
+#                            variables = c("B25001_001"),
+#                            year = 2016,
+#                            output = "wide",
+#                            geometry = FALSE)
+
+acs_variables <- list(
+  total_households = sym("B25001_001")
+)
+
+acs_features <- get_acs(state = "NC", 
+                    geography = "block group",
+                    variables = as.character(unlist(acs_variables)),
+                    year = 2016,
+                    output = "tidy",
+                    geometry = FALSE)
+
+acs_features <- pivot_wider(acs_features, id_cols=c("GEOID"),
+                            names_from=c("variable"),
+                            #names_prefix = "acs_",
+                            values_from=c("estimate"))
+
+acs_features <- rename(acs_features, !!!acs_variables)
+head(acs_features)
+
+```
+
+
+```{r}
+acs_block_group_utilities <- st_sf(left_join(acs_features, block_group_utilities, by="GEOID"))
+
+acs_block_group_utilities %>% filter(is.na(ID)) %>% summarise(covered=sum(total_households))
+
+acs_block_group_utilities %>% filter(is.na(ID)) %>% 
+  ggplot() +
+  geom_sf(aes(fill="red", alpha=.2), color="blue", size=.2) + 
+  geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+tract_utilities <- acs_block_group_utilities %>% st_set_geometry(NULL) %>% mutate(ID=fct_explicit_na(ID)) %>% 
+  group_by(TRACTCE, ID) %>% 
+  summarise(tract_households_served = sum(total_households)) %>% 
+  left_join(acs_block_group_utilities %>% st_set_geometry(NULL) %>% group_by(TRACTCE) %>% 
+              summarise(tract_households = sum(total_households)), by="TRACTCE") %>% 
+  mutate(percent_tract_served = tract_households_served / tract_households) %>% 
+  group_by(TRACTCE) %>% slice(which.max(percent_tract_served))# %>% 
+  #arrange((percent_tract_served)) %>% head(50)# slice(1:10)
+
+```
+
+```{r eval=FALSE}
+left_join(census_tracts, tract_utilities %>% filter(ID=="(Missing)"), by="TRACTCE") %>% 
+  ggplot() +
+  geom_sf(aes(fill=ID, alpha=.2), color="blue", size=.2) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "none")
+```
+
+
+```{r}
+left_join(census_tracts, tract_utilities %>% filter(percent_tract_served<.5), by="TRACTCE") %>% 
+  ggplot() +
+  geom_sf(aes(fill=ID, alpha=.2), color="blue", size=.2) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+# Percent of households in a tract that is served entirely by 1 utility
+sum((tract_utilities$percent_tract_served==1) * tract_utilities$tract_households_served)/sum(tract_utilities$tract_households)
+
+# Percent of households served by the utility assigned to their tract
+sum(tract_utilities$tract_households_served)/sum(tract_utilities$tract_households)
+```
+
+
+```{r}
+left_join(census_tracts, tract_utilities, by="TRACTCE") %>% 
+  ggplot() +
+  geom_sf(aes(fill=percent_tract_served), color="blue", size=.2) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "top")
+```
+
+```{r}
+tract_utilities <- left_join(census_tracts, tract_utilities, by="TRACTCE")
+```
+
+
+# Join EIA EIA-861 Data
+
+```{r}
+# Download the EIA-861 Data
+zip_url <- "https://www.eia.gov/electricity/data/eia861/archive/zip/f8612016.zip"
+
+desired_path <- file.path("Frame_2016.xlsx")
+
+if (!file.exists(desired_path)){
+  print(paste0("Downloading ",desired_name))
+  temp <- tempfile()
+  download.file(zip_url,temp)
+  unzip(temp)
+  unlink(temp)
+}
+```
+
+
+```{r}
+# Get the sheets we want
+# Filter by the variables we want
+#desired_fields <- list(Frame=c(Utility Number	Utility Name	Ownership Code	Ownership)
+frame <- read_excel(file.path("Frame_2016.xlsx"))
+sales <- read_excel(path=file.path("Sales_Ult_Cust_2016.xlsx"),
+                    sheet="States",
+                    skip=2)
+```
+
+
+```{r}
+# Ownership Type
+frame <- select(frame,
+               `Utility Number`,
+               `Utility Name`,
+               `Ownership`,
+               `Short Form`,
+               `Sales to Ultimate Customers`)
+
+frame <- rename(frame,
+               ID=`Utility Number`,
+               utility_name=`Utility Name`,
+               ownership_type=`Ownership`) %>% 
+  mutate(ID=as.factor(ID))
+
+type <- select(frame, `ID`,`utility_name`, `ownership_type`)
+```
+
+
+```{r}
+## Retail Price
+## Retail Customers
+## Retail Load
+
+sales <- sales %>% select(ID=`Utility Number`,
+                          utility_name=`Utility Name`,
+                          ownership_type=`Ownership`,
+                 part=`Part`,
+                 service_type=`Service Type`,
+                 imputed=`Data Type\r\nO = Observed\r\nI = Imputed`,
+                 state=`State`,
+                 balancing_authority=`BA_CODE`,
+                 retail_revenue_thousands=`Thousand Dollars...10`,
+                 retail_sales_MWh=`Megawatthours...11`,
+                 retail_customers=`Count...12`) %>% 
+  filter(ID!=99999, retail_revenue_thousands!=0) %>%  
+  mutate(ID=as.character(ID),
+                  imputed=if_else(imputed=="O",FALSE,TRUE,NA),
+                  retail_revenue_thousands=as.numeric(retail_revenue_thousands),
+                  retail_sales_MWh=as.numeric(retail_sales_MWh),
+                  retail_customers=as.numeric(retail_customers),
+                  implied_price_kWh=retail_revenue_thousands/retail_sales_MWh,
+                  revenue_per_customer=retail_revenue_thousands/(1000*retail_customers))
+
+state_sales <- sales %>% filter(state=="NC")
+```
+
+```{r}
+ggplot(state_sales, aes(x=implied_price_kWh, color=ownership_type, fill=ownership_type)) + 
+  geom_histogram(binwidth = 0.005)
+```
+
+```{r}
+state_sales %>% filter(ID %in% unique(tract_utilities$ID)) %>%
+  ggplot(aes(x=implied_price_kWh, color=ownership_type, fill=ownership_type)) + 
+  geom_histogram(binwidth = 0.005)
+```
+
+```{r}
+# Join to tract_utilities based on utility "ID"
+tract_utilities <- left_join(tract_utilities, state_sales, by="ID")
+```
+
+```{r}
+st_write(tract_utilities, "tract_utilities.geojson", delete_dsn = TRUE)
+```
+
+```{r}
+tract_utilities <- st_read("tract_utilities.geojson")
+```
+
+```{r}
+tract_utilities %>% 
+  ggplot() +
+  geom_sf(aes(fill=ownership_type),size=.1) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  geom_sf(data = counties, fill = NA, color = "black", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "top")
+```
+
+```{r eval=FALSE}
+left_join(census_tracts, tract_utilities, by="TRACTCE") %>% 
+  ggplot() +
+  geom_sf(aes(fill=utility_name),size=.1) + 
+  #geom_sf(data = bgs, fill = NA, color = "blue", size=.1) + 
+  #geom_sf(data = census_tracts, fill = NA, color = "red", size=.2) + 
+  coord_sf(crs = 4326) + 
+  theme(legend.position = "right")
+```
+
+```{r}
+summary(tract_utilities)
+```
+
+
+```{r}
+# Convert Mising IDs back to NA
+# ID as factor
+# TRACTCE as factor (or even to geoID)
+# utility_type as factor
+
+#undo ID=fct_explicit_na(ID)
+tract_utilities$ID <- ifelse(!is.na(tract_utilities$ID) & tract_utilities$ID == "(Missing)", NA, tract_utilities$ID)
+
+final_data <- tract_utilities %>% select(tract_id=`TRACTCE`,
+                                         utility_id=`ID`,
+                                         `tract_households_served`,
+                                         `percent_tract_served`,
+                                         `utility_name`,
+                                         `ownership_type`,
+                                         `balancing_authority`,
+                                         `retail_revenue_thousands`,
+                                         `retail_sales_MWh`,
+                                         `retail_customers`,
+                                         `implied_price_kWh`,
+                                         `revenue_per_customer`) %>% ungroup(tract_id) %>% 
+  mutate(tract_id=as.factor(tract_id),
+         utility_id=as.factor(utility_id),
+         ownership_type=as.factor(ownership_type))
+
+
+st_write(final_data, "clean_erst.geojson", delete_dsn = TRUE)
+
+final_data_no_geometry <- st_set_geometry(final_data, NULL)
+```
+
+
+```{r}
+# Save to csv
+write_csv(final_data_no_geometry, "clean_erst.csv")
+```
+
+
+```{r}
+data_reloaded <- read_csv(file.path(getwd(),"clean_erst.csv"),
+                          col_types=cols(
+                            tract_id = readr::col_factor(),
+                            utility_id = readr::col_factor(),
+                            percent_tract_served = readr::col_double(),
+                            tract_households_served = readr::col_double(),
+                            utility_name = readr::col_character(),
+                            ownership_type = readr::col_factor(NULL),
+                            balancing_authority = readr::col_factor(NULL),
+                            retail_revenue_thousands = readr::col_double(),
+                            retail_sales_MWh = readr::col_double(),
+                            retail_customers = readr::col_double(),
+                            implied_price_kWh = readr::col_double(),
+                            revenue_per_customer = readr::col_double()))
+
+all(data_reloaded == final_data_no_geometry, na.rm=TRUE)
+```
