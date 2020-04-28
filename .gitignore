@@ -104,21 +104,29 @@ venv.bak/
 .mypy_cache/
 
 # R
-*.csv
 .Rproj.user
 *.Rproj
 *cache
+*.Rhistory
 
-# Geospatial Data
+# Data
 *.cpg
 *.dbf
 *.prj
 *.shp
 *.shx
 *.xml
+*.geojson
 
 *.gdb
 
 *.kml
 
 *.zip
+*.csv
+*.dat
+
+*.xlsx
+
+# Results
+*.pdf
