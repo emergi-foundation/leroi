@@ -1,0 +1,502 @@
+---
+title: 'Net Energy Equity: Findings'
+author: "Eric Scheier"
+date: "`r format(Sys.time(), '%Y-%B-%d')`"
+output:
+  html_document: default
+  pdf_document: default
+  tufte::tufte_handout: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+is_final=FALSE
+is_preview=TRUE
+is_draft=TRUE
+set.seed(123)
+
+knitr::opts_chunk$set(comment='##', 
+                      collapse=ifelse(is_preview,TRUE,!is_draft),
+                      echo=ifelse(is_preview,FALSE,is_draft),
+                      eval=TRUE,
+                      warning=ifelse(is_preview,FALSE,is_draft),
+                      error=ifelse(is_preview,FALSE,is_draft),
+                      results=ifelse(is_final,'hide',ifelse(is_preview,'hide','asis')),
+                      fig.keep='all',
+                      message=ifelse(is_preview,FALSE,is_draft),
+                      include=ifelse(is_preview,TRUE,is_draft),
+                      tidy=TRUE,
+                      cache=FALSE,
+                      fig.margin=FALSE,
+                      fig.fullwidth = FALSE
+                      )
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+kable(knitr::opts_chunk$get() %>% enframe())
+```
+
+
+```{r}
+library(tidyverse)
+library(sf)
+library(MASS)
+library(scales)
+library(caret)
+library(spatstat)
+library(GGally)
+library(ggpubr)
+library(patchwork)
+library(mgcv)
+library(tidyselect)
+library(RColorBrewer)
+library(wesanderson)
+library(tigris)
+library(readxl)
+library(tidyverse)
+```
+
+
+```{r}
+source("ratios.R")
+source("charts.R")
+```
+
+# Loading Data
+
+```{r}
+# load the tract or state (or zip) geojson from csv to sf as: data
+census_tracts <- st_read("census_tracts.geojson")
+states <- st_read("states.geojson")
+data <- read_csv("very_clean_data.csv")
+```
+
+# Calculating Additional Metrics
+
+## Poverty
+
+How many households are below the poverty line in this data?
+
+```{r}
+total_households <- sum(data$households)
+
+number_in_poverty <- sum((data$in_poverty==TRUE) * (data$households))
+
+pct_in_poverty <- number_in_poverty / total_households
+
+number_above_poverty <- sum((data$in_poverty==FALSE) * (data$households))
+
+pct_above_poverty <- number_above_poverty / total_households
+```
+
+# Adding Net Energy Analysis Metrics
+
+Most/All Net Energy Analysis metrics are composed of the gross amount of resource extracted, and the amount of resource spent in the extraction process. For households extracting income from the economy, these ratios will be composed of:
+
+`g` = gross income
+`s` = spending on energy
+
+How are these metrics related? We are specifically curious about the relationship among households considered to be in poverty by the federal government.
+
+```{r}
+ggplot(data=data, aes(x=annual_income, y=annual_energy_cost, color=in_poverty)) + 
+  geom_point(aes(size=households), alpha=0.05, show.legend = FALSE) + 
+  geom_smooth(method=lm,
+                se=TRUE,
+                fullrange=TRUE)# + 
+  #xlim(0,500000)
+  
+```
+
+From these metrics we can create all of the relevant energy ratios:
+
+## Traditional Energy Burden Indicator
+
+`energy_burden = s/g`
+
+
+```{r}
+energy_burden_poverty_line <- 0.10
+
+eroi_poverty_line <- eroi_func(g=1,
+                               s=energy_burden_poverty_line)
+
+average_energy_cost <- weighted.mean(data$annual_energy_cost, 
+                                     data$annual_kWh*data$households, 
+                                     na.rm = T)/weighted.mean(data$annual_kWh,
+                                                              data$households,
+                                                              na.rm = T)
+
+median_energy_cost <- weighted.median(data$annual_energy_cost, 
+                                     data$annual_kWh*data$households, 
+                                     na.rm = T)/weighted.median(data$annual_kWh,
+                                                              data$households,
+                                                              na.rm = T)
+# 12*(data$replica_electricity_spend + 
+#       data$lead_gas_spend + 
+#       data$lead_other_spend)
+# data$total_kWh <- data$gas_kWh + data$electricity_kWh
+median_electricity_cost <- weighted.median(data$replica_electricity_spend, 
+                                     data$electricity_kWh*data$households, 
+                                     na.rm = T)/weighted.median(data$electricity_kWh,
+                                                              data$households,
+                                                              na.rm = T)
+
+median_gas_cost <- weighted.median(data$lead_gas_spend, 
+                                     data$gas_kWh*data$households, 
+                                     na.rm = T)/weighted.median(data$gas_kWh,
+                                                              data$households,
+                                                              na.rm = T)
+median_gas_cost_Mcf <- weighted.median(data$lead_gas_spend, 
+                                     data$gas_Mcf*data$households, 
+                                     na.rm = T)/weighted.median(data$gas_Mcf,
+                                                              data$households,
+                                                              na.rm = T)
+
+
+ner_poverty_line_dlrs <- ner_func(g=1,
+                                  s=energy_burden_poverty_line)
+
+ner_poverty_line_mean <- ner_func(g=1,
+                             s=energy_burden_poverty_line,
+                             se=energy_burden_poverty_line/(average_energy_cost))
+
+ner_poverty_line_median <- ner_func(g=1,
+                             s=energy_burden_poverty_line,
+                             se=median_energy_cost/energy_burden_poverty_line)
+
+ner_poverty_line <- ner_poverty_line_median
+
+
+dear_poverty_line <- dear_func(g=1,
+                               s=energy_burden_poverty_line)
+
+ner_dear_poverty_line <- dear_func(g=1+median_energy_cost*ner_poverty_line_median,
+                               s=1)
+
+```
+
+
+
+## Test Run
+
+```{r}
+clean_data <- data
+```
+
+
+
+```{r}
+metric_name <- "ner"
+metric_cutoff_level <- ner_poverty_line
+group_variable <- NULL# "GEOID" #"state_abbr" #merge_geo_id" #
+group_columns <- c(group_variable) #c("gisjoin") #
+graph_data <- filter_graph_data(data, group_columns, metric_name)
+
+top_metrics <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.999, 
+                         lower_quantile_view=0.001)
+head(top_metrics)
+```
+
+
+```{r}
+#data$GEOID <- sub('.', '', data$gisjoin)
+group_variable <- "gisjoin"# "GEOID" #"state_abbr" #merge_geo_id" #
+group_columns <- c(group_variable) #c("gisjoin") #
+graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
+
+gwm <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.75, 
+                         lower_quantile_view=0.25)
+head(gwm)
+```
+
+```{r}
+clean_top_metrics <- grouped_weighted_metrics(graph_data, 
+                         group_columns=NULL, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.75, 
+                         lower_quantile_view=0.25)
+head(clean_top_metrics)
+```
+
+
+```{r}
+tract_shp <- left_join(census_tracts, gwm, by=c("gisjoin"))
+
+# cloropleth map by census tract
+centroids <- st_coordinates(st_centroid(tract_shp$geometry)) %>% data.frame()
+centroids <- centroids[is.finite(rowSums(centroids)),]
+
+# center_centroid <- st_centroid()
+
+o <- tract_shp[,c("metric_median", "geometry")] %>% 
+  ggplot() +
+  geom_sf(aes(fill=metric_median),size=0, alpha=0.9) + 
+  coord_sf(crs = 4326, #26945, #
+           xlim = c(min(centroids$X), max(centroids$X)), 
+           ylim = c(min(centroids$Y), max(centroids$Y)), 
+           expand = TRUE)
+o
+```
+
+
+```{r}
+color_values <- as.numeric(sort(c(clean_top_metrics$metric_min,
+                                clean_top_metrics$metric_lower,
+                                clean_top_metrics$metric_median,
+                                # top_metrics$pct_in_group_below_cutoff,
+                                clean_top_metrics$metric_upper, 
+                                clean_top_metrics$metric_max), decreasing = F))
+color_values <- scales::rescale(x=color_values, to=c(0,1))
+
+p <- o +
+  # geom_polygon(data = spdf_fortified, 
+  #              aes(fill = nb_equip, x = long, y = lat, group = group) , 
+  #              size=0, alpha=0.9) +
+  theme_void() +
+  # scale_continuous_identity(aes(color=metric_median)) +
+  # scale_fill_identity() +
+  scale_fill_gradientn(#) + 
+  # scale_fill_viridis(trans = "log", 
+                     # breaks=c(1,5,10,20,50,100),
+                     name="Net Income per Energy Spend ($/kWh)",
+                     colors = c("#ff5252","#fff176","#228b22"),
+                     na.value = "#616161",
+                     values = color_values,
+                     guide = guide_colorbar(direction="horizontal",
+                                            title.position = 'top'
+                                            ))+#keyheight = unit(4, units = "mm"),
+                                           #keywidth=unit(4, units = "mm"),
+                                           # label.position = "bottom",
+                                           # , nrow=1) ) +
+  labs(
+    title = "Net Energy Return of U.S. Communities",
+    subtitle = "Dollars earned per unit of energy consumed.",
+    caption = "Data: NREL" # | Creation: Eric Scheier | emergi.eco"
+  ) +
+  theme(
+    text = element_text(color = "#22211d"),
+    plot.background = element_rect(fill = "#f5f5f2", color = NA),
+    panel.background = element_rect(fill = "#f5f5f2", color = NA),
+    legend.background = element_rect(fill = "#f5f5f2", color = NA),
+
+    plot.title = element_text(size= 22, 
+                              hjust=0.01, 
+                              color = "#4e4d47", 
+                              margin = margin(b = -0.1, t = 0.4, l = 2, unit = "cm")),
+    plot.subtitle = element_text(size= 17, 
+                                 hjust=0.01, 
+                                 color = "#4e4d47", 
+                                 margin = margin(b = -0.1, t = 0.43, l = 2, unit = "cm")),
+    plot.caption = element_text( size=12, 
+                                 color = "#4e4d47", 
+                                 margin = margin(b = 0.3, r=-99, unit = "cm") ),
+
+    legend.position = c(.7, .8)
+  ) #+
+  #coord_map()
+p
+```
+
+```{r}
+tract_shp$in_poverty <- tract_shp$metric_median <= ner_poverty_line
+q <- tract_shp[,c("in_poverty", "geometry")] %>% 
+  ggplot() +
+  geom_sf(aes(fill=in_poverty),size=0, alpha=0.9) + 
+  coord_sf(crs = 4326, #26945, #
+           xlim = c(min(centroids$X), max(centroids$X)), 
+           ylim = c(min(centroids$Y), max(centroids$Y)), 
+           expand = TRUE)
+q
+```
+
+# Analysis
+
+Of the above metrics, the Net Energy Ratio (NER) and Discretionary Energy Availability Rate (DEAR) are the most desirable, The DEAR is nicely bound between 0-100%, while the NER is the standard metric of Net Energy Analysis.
+
+EROI is a precursor of NER, while Energy Burden is the metric du jour in the energy insecurity literature.
+
+```{r eval=FALSE}
+ggplot(data=clean_data, aes(x=eroi, y=dear, fill=income_bracket, color=income_bracket)) + 
+  xlim(c(0,100)) + 
+  ylim(c(0,1)) + 
+  geom_point(aes(size=households), alpha=0.1, position="jitter") + 
+  geom_hline(yintercept = .9) + 
+  geom_vline(xintercept = 10) + 
+  geom_smooth(method="lm",
+              se=FALSE,
+              fullrange=TRUE)
+```
+
+DEAR and NER are often compared to portray a phenomenon known as the "net energy cliff" Do we see the energy cliff in these data?
+
+```{r}
+ggplot(data=clean_data, aes(x=ner, y=dear, fill=in_poverty, color=in_poverty)) + 
+  xlim(c(0,10)) + 
+  ylim(c(0,1)) + 
+  geom_point(aes(size=households), alpha=0.1, position="jitter", show.legend = FALSE) + 
+  geom_hline(yintercept = dear_poverty_line) + 
+  geom_vline(xintercept = ner_poverty_line_median) + 
+  geom_smooth(method="lm",
+              se=FALSE,
+              fullrange=TRUE)
+```
+
+
+```{r}
+#chart_title <- "Household Economic Return on Energy Spending"
+chart_title <- "Community Net Energy Return"
+chart_subtitle <- "Net Earnings per Unit of Energy Consumed"
+
+group_columns <- NULL#"income_bracket")#in_poverty
+                   #"primary_heating_fuel"
+
+metric_name <- "ner" #"energy_burden" #"ner" #"dear" #"eroi"
+metric_label <- "$/kWh"
+metric_cutoff_level <- ner_poverty_line
+metric_cutoff_label <- "Energy Poverty Line"
+
+upper_quantile_view <- 1.0
+lower_quantile_view <- 0.0
+```
+
+
+```{r eval=FALSE}
+# for (geo_id in graph_data$merge_geo_id){
+group_inspect <- function(geo_id){
+    print(as.character(geo_id))
+    sub_graph_data <- graph_data[graph_data$gisjoin==geo_id,]
+    if( sum(!is.na(sub_graph_data$households))<3 || 
+        sum
+        all(sub_graph_data$households==0) ){
+      print(NA)
+      return(FALSE)
+    } else {
+      return(as.numeric(weighted.quantile(x=sub_graph_data$ner, w=sub_graph_data$households, probs=c(.5), na.rm=T)))
+    }
+}
+
+sapply(unique(graph_data$gisjoin), group_inspect)
+```
+
+
+We are primarily interested in how households of different characteristics are distributed according to their Net Energy Ratio, which represents how many net dollars are earned by a household for every dollar they spend on energy. In this context we will refer to NER as the "Net Energy Income Ratio", or the "Net Household Income Earned for Every Dollar Spent on Energy."
+
+```{r eval=FALSE}
+clean_data$simplified_primary_heating_fuel <- as.factor(ifelse(clean_data$primary_heating_fuel=="ELECTRICITY","ELECTRICITY", 
+                                                               ifelse(clean_data$primary_heating_fuel %in% c("UTILITY GAS","BOTTLED GAS"), "GAS", 
+                                                                      "OTHER")))
+group_columns=c("simplified_primary_heating_fuel")
+
+clean_data$solar_primary_heating_fuel <- as.factor(ifelse(clean_data$primary_heating_fuel=="ELECTRICITY","ELECTRICITY", 
+                                                               ifelse(clean_data$primary_heating_fuel %in% c("UTILITY GAS","BOTTLED GAS"), "GAS", 
+                                                                      ifelse(clean_data$primary_heating_fuel=="SOLAR","SOLAR",
+                                                                      "OTHER"))))
+group_columns=c("solar_primary_heating_fuel")
+```
+
+```{r}
+top_line_group <- "in_poverty"
+
+top_line_charts <- make_all_charts(clean_data,
+                            group_columns=top_line_group,
+                            metric_name,
+                            metric_label, 
+                            metric_cutoff_level,
+                            metric_cutoff_label,
+                            #upper_quantile_view,
+                            #lower_quantile_view,
+                            chart_title=chart_title,
+                            chart_subtitle=chart_subtitle)
+top_line_charts
+```
+
+
+```{r}
+graph_data <- filter_graph_data(clean_data=clean_data, 
+                                group_columns=NULL, 
+                                metric_name=metric_name)
+density_chart(graph_data=graph_data,
+                group_columns=NULL,
+                metric_name=metric_name, 
+              metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+
+```
+
+
+```{r}
+make_violin_plot <- function(graph_data, 
+                             group_columns, 
+                             metric_name,
+                             metric_cutoff_level,
+                             upper_quantile_view=0.99,
+                             lower_quantile_view=0.0){
+  
+  gwm <- grouped_weighted_metrics(graph_data=graph_data, 
+                           group_columns=group_columns, 
+                           metric_name=metric_name, 
+                           metric_cutoff_level=metric_cutoff_level, 
+                           upper_quantile_view=upper_quantile_view, 
+                           lower_quantile_view=lower_quantile_view)
+  
+  ylims <- c(min(max(0,gwm$metric_lower[is.finite(gwm$metric_lower)])),
+             max(gwm$metric_upper[is.finite(gwm$metric_upper)]))
+  
+  sort_column <- if(is.null(group_columns)){"gisjoin"}else if(length(group_columns)==1){
+    group_columns
+  }else{paste0(group_columns[0])}
+  
+  y <- graph_data %>% #[graph_data$state_abbr=="VT",],
+    # mutate(!!sym(group_variable) = fct_reorder(!!sym(group_variable), !!sym(metric_name), .fun='median'))) %>% 
+    # mutate(state_abbr = fct_reorder(state_abbr, ner, .fun='median')) %>%
+    {if(!is.null(group_columns)) group_by_at(., .vars=vars(all_of(group_columns))) else .} %>% 
+    ggplot(aes(group=if(is.null(group_columns)){
+      group_columns}else{
+        paste0("interaction(", paste0(group_columns, collapse =  ", "), ")")},
+      x = fct_reorder(!!sym(sort_column),
+                      !!sym(metric_name),
+                      .fun=median, na.rm=T, .desc=F), #!!sym(group_variable),#
+      y= !!sym(metric_name)))+#, 
+               #color = !! sym(response_var), 
+               #fill= !! sym(response_var))) + 
+      geom_boxplot(aes(weight=sqrt(households),
+                      varwidth = T),
+                   notch=TRUE, width=0.2, fill=NA, color="gray", shape = 18, size = 0.5,
+                   outlier.shape = NA) + 
+      stat_summary(fun.y=median,fun.args=c(na.rm=TRUE), 
+                   geom = "point", shape = 18, size = 1) + 
+      # geom_violin(trim=FALSE, alpha=0.3, outlier.shape=NA) + 
+      #ggtitle(paste0("Predictor Scaled Distributions")) +
+      theme_minimal(base_size = 5) + theme(legend.position="none") + 
+      theme(axis.text=element_text(size=3.5)) + 
+    coord_cartesian(ylim=as.numeric(ylims)*1.05)
+      # coord_flip(ylim = as.numeric(ylims)*1.05)
+  # print("graph_2")
+   return(y)
+}
+graph_data <- filter_graph_data(clean_data=clean_data, 
+                                group_columns=c("states"), 
+                                metric_name=metric_name)
+
+y <- make_violin_plot(graph_data=graph_data,
+                      group_columns=group_columns,
+                      metric_name=metric_name,
+                      metric_cutoff_level=metric_cutoff_level)
+print(y)
+```

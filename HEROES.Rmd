@@ -1,0 +1,1120 @@
+---
+title: 'Net Household Income Earned for Every Dollar Spent on Energy'
+author: "Eric Scheier"
+date: "`r format(Sys.time(), '%Y-%B-%d')`"
+output:
+  html_document: default
+  pdf_document: default
+  tufte::tufte_handout: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+is_final=FALSE
+is_preview=TRUE
+is_draft=TRUE
+set.seed(123)
+
+knitr::opts_chunk$set(comment='##', 
+                      collapse=ifelse(is_preview,TRUE,!is_draft),
+                      echo=ifelse(is_preview,FALSE,is_draft),
+                      eval=TRUE,
+                      warning=ifelse(is_preview,FALSE,is_draft),
+                      error=ifelse(is_preview,FALSE,is_draft),
+                      results=ifelse(is_final,'hide',ifelse(is_preview,'hide','asis')),
+                      fig.keep='all',
+                      message=ifelse(is_preview,FALSE,is_draft),
+                      include=ifelse(is_preview,TRUE,is_draft),
+                      tidy=TRUE,
+                      cache=FALSE,
+                      fig.margin=FALSE,
+                      fig.fullwidth = FALSE
+                      )
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+kable(knitr::opts_chunk$get() %>% enframe())
+```
+
+
+```{r}
+library(sf)
+library(MASS)
+library(scales)
+library(caret)
+library(tidyverse)
+library(spatstat)
+library(GGally)
+library(ggpubr)
+library(patchwork)
+library(mgcv)
+library(tidyselect)
+library(RColorBrewer)
+library(wesanderson)
+library(tigris)
+library(readxl)
+source("lead_munging.R")
+```
+
+```{r}
+states <- "nc" #c("nc","sc") #  
+income_metric <- "fpl15" #"ami68"
+geographic_scope <- "tract" #statecitycounty
+
+col_types <- cols(geo_id = readr::col_character(), 
+                  state_id = readr::col_character(),
+                  #state = readr::col_character(),
+                  county_id = readr::col_character(),
+                  #county = readr::col_character(),
+                  tract_id = readr::col_character(),
+                  puma10_code = readr::col_character(),
+                  fmr_code = readr::col_character(),
+                  occupancy_type = readr::col_factor(),
+                  income_bracket = readr::col_factor(),
+                  primary_heating_fuel = readr::col_factor(),
+                  number_of_units = readr::col_factor(),
+                  year_constructed = readr::col_factor(),
+                  households = col_double(),
+                  annual_income = col_double(),
+                  electricity_spend = col_double(),
+                  gas_spend = col_double(),
+                  other_spend = col_double(),
+                  acs_responses = col_double(),
+                  min_age = col_double(),
+                  min_units = col_double(),
+                  detached = readr::col_factor(NULL),
+                  mean_energy_cost = col_double(),
+                  pct_non_male = col_double(), 
+                  median_age = col_double(),
+                  pct_no_high_school = col_double(),
+                  pct_non_white = col_double(),
+                  median_income = col_double(),
+                  acs_total_households = col_double())
+
+data <- get_multiple_states(states=states,
+                            income_metric=income_metric,
+                            geographic_scope=geographic_scope,
+                            refresh=TRUE,
+                            col_types=col_types,
+                            raw=FALSE)
+
+save_file_name <- toupper(paste(income_metric,
+                                geographic_scope,
+                                "sh",
+                                paste(sort(states),  collapse = "_"), 
+                                sep = "_"))
+
+# clean_file_name <- paste0("clean_lead_",save_file_name,".csv")
+
+# data <- read_csv(file.path(getwd(),clean_file_name),col_types=col_types)
+```
+
+
+```{r}
+data$year_constructed <- fct_reorder(data$year_constructed, data$min_age)
+data$number_of_units <- fct_reorder(data$number_of_units, data$min_units)
+data$income_bracket <- factor(data$income_bracket, levels=sort(levels(data$income_bracket)))
+
+data$state_name <- factor(data$state_name, levels=sort(unique(data$state_name)))
+data$area_name <- factor(data$area_name, levels=sort(unique(data$area_name)))
+data$state_code_usps <- factor(data$state_code_usps, levels=sort(unique(data$state_code_usps)))
+
+
+# for (col_to_order in cols_to_order){
+#   data[[col_to_order]] <- factor(data[[col_to_order]], 
+#                                  levels=levels(data[[col_to_order]])[
+#                                    sort(as.numeric(str_extract(levels(data[[col_to_order]]), "[0-9]+")), 
+#                                         index.return=TRUE, 
+#                                         decreasing = TRUE)[["ix"]]
+#                                    ])
+#   print(levels(data[[col_to_order]]))
+# }
+```
+
+```{r}
+#str(data) #print(kable(var_desc) %>% kable_styling(c("striped", "bordered")))
+#summary(data)
+```
+
+# Calculating Additional Metrics
+
+## Poverty
+
+```{r echo=TRUE}
+data$in_poverty <- as.factor(ifelse(data$income_bracket=="0-100%","Below FPL", "Above FPL"))
+```
+
+How many households are below the poverty line in this data?
+
+```{r}
+total_households <- sum(data$households)
+
+number_in_poverty <- sum((data$income_bracket=="0-100%") * (data$households))
+
+pct_in_poverty <- number_in_poverty / total_households
+
+number_above_poverty <- sum((data$income_bracket!="0-100%") * (data$households))
+
+pct_above_poverty <- number_above_poverty / total_households
+```
+
+
+## Annual Energy Spending
+
+```{r echo=TRUE}
+data$annual_energy_cost <- 12*data$mean_energy_cost
+```
+
+## Net Income
+
+```{r echo=TRUE}
+data$net_annual_income <- data$annual_income - (data$annual_energy_cost)
+```
+
+# Adding Net Energy Analysis Metrics
+
+Most/All Net Energy Analysis metrics are composed of the gross amount of resource extracted, and the amount of resource spent in the extraction process. For households extracting income from the economy, these ratios will be composed of:
+
+`g` = gross income
+`s` = spending on energy
+
+How are these metrics related? We are specifically curious about the relationship among households considered to be in poverty by the federal government.
+
+```{r}
+ggplot(data=data, aes(x=annual_income, y=annual_energy_cost, color=in_poverty)) + 
+  geom_point(aes(size=households), alpha=0.05, show.legend = FALSE) + 
+  geom_smooth(method=lm,
+                se=TRUE,
+                fullrange=TRUE)# + 
+  #xlim(0,500000)
+  
+```
+
+From these metrics we can create all of the relevant energy ratios:
+
+## Traditional Energy Burden Indicator
+
+`energy_burden = s/g`
+
+
+```{r}
+# Create the Energy Burden Indicator `mean_energy_burden`.
+
+energy_burden_func <- function(g,s){
+  s/g
+}
+
+# data$energy_burden <- data$mean_energy_cost / (data$annual_income/12.0)
+data$energy_burden <- energy_burden_func(g=data$annual_income,
+                                         s=12*data$mean_energy_cost)
+```
+
+Energy poverty is commonly defined as an expenditure of greater than 10% of household income on energy^[D. J. Bednar and T. G. Reames, “Recognition of and response to energy poverty in the United States,” Nature Energy, 2020.]. This level will be referred to as the "Energy Poverty Line" and translated into its relative level for the other ratios below.
+
+```{r}
+energy_burden_poverty_line <- 0.10
+
+#For further analysis, I will add a designation of whether a cohort is, on average, in energy poverty depending on whether the mean energy burden is above `r label_percent()(energy_burden_poverty_line)`.
+
+data$energy_burden_poverty <- as.logical(data$energy_burden > energy_burden_poverty_line)
+```
+
+## Energy Return on Investment
+
+`eroi = g/s`
+
+```{r}
+# Create the Energy Return on Investment Indicator `eroi`
+eroi_func <- function(g,s){
+  g/s
+}
+
+# data$eroi <- data$annual_income / (12*data$mean_energy_cost)
+data$eroi <- eroi_func(g=data$annual_income,
+                       s=12*data$mean_energy_cost)
+
+eroi_poverty_line <- eroi_func(g=1,
+                               s=energy_burden_poverty_line)
+```
+
+
+## Net Energy Ratio (or Net Energy Return)
+
+`ner = (g-s)/s`
+
+```{r}
+ner_func <- function(g,s){
+  (g-s)/s
+}
+
+# data$ner <- (data$annual_income - (12*data$mean_energy_cost)) / (12*data$mean_energy_cost)
+data$ner <- ner_func(g=data$annual_income,
+                     s=12*data$mean_energy_cost)
+
+ner_poverty_line <- ner_func(g=1,
+                             s=energy_burden_poverty_line)
+```
+
+## Discretionary Energy Availability Rate
+
+`dear = (g-s)/g`
+
+This is equal to `1 - energy_burden`.
+
+```{r}
+dear_func <- function(g,s){
+  (g-s)/g
+}
+
+# data$dear <- (data$annual_income - (12*data$mean_energy_cost)) / data$annual_income
+data$dear <- dear_func(g=data$annual_income,
+                       s=12*data$mean_energy_cost)
+
+dear_poverty_line <- dear_func(g=1,
+                               s=energy_burden_poverty_line)
+```
+
+
+# Analysis
+
+Of the above metrics, the Net Energy Ratio (NER) and Discretionary Energy Availability Rate (DEAR) are the most desirable, The DEAR is nicely bound between 0-100%, while the NER is the standard metric of Net Energy Analysis.
+
+EROI is a precursor of NER, while Energy Burden is the metric du jour in the energy insecurity literature.
+
+```{r}
+clean_data <- data #drop_na(data)
+```
+
+```{r eval=FALSE}
+ggplot(data=clean_data, aes(x=eroi, y=dear, fill=income_bracket, color=income_bracket)) + 
+  xlim(c(0,100)) + 
+  ylim(c(0,1)) + 
+  geom_point(aes(size=households), alpha=0.1, position="jitter") + 
+  geom_hline(yintercept = .9) + 
+  geom_vline(xintercept = 10) + 
+  geom_smooth(method="lm",
+              se=FALSE,
+              fullrange=TRUE)
+```
+
+DEAR and NER are often compared to portray a phenomenon known as the "net energy cliff" Do we see the energy cliff in these data?
+
+```{r}
+ggplot(data=clean_data, aes(x=ner, y=dear, fill=in_poverty, color=in_poverty)) + 
+  xlim(c(0,100)) + 
+  ylim(c(0,1)) + 
+  geom_point(aes(size=households), alpha=0.1, position="jitter", show.legend = FALSE) + 
+  geom_hline(yintercept = .9) + 
+  geom_vline(xintercept = 10) + 
+  geom_smooth(method="lm",
+              se=FALSE,
+              fullrange=TRUE)
+```
+
+
+```{r}
+#chart_title <- "Household Economic Return on Energy Spending"
+chart_title <- "Net Energy Income Ratio"
+chart_subtitle <- "Net Household Income Earned for Every Dollar Spent on Energy"
+
+group_columns <- NULL#"income_bracket")#in_poverty
+                   #"primary_heating_fuel")
+
+metric_name <- "ner" #"energy_burden" #"ner" #"dear" #"eroi"
+metric_label <- "Net Energy Income Ratio"
+metric_cutoff_level <- ner_poverty_line
+metric_cutoff_label <- "Energy Poverty Line"
+
+upper_quantile_view <- .99
+lower_quantile_view <- .01
+```
+
+```{r}
+stat_ewcdf <- function(mapping = NULL, data = NULL,
+                      geom = "step", position = "identity",
+                      weight =  NULL, 
+                      ...,
+                      n = NULL,
+                      pad = TRUE,
+                      na.rm = FALSE,
+                      show.legend = NA,
+                      inherit.aes = TRUE) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = StatEcdf,
+    geom = geom,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      n = n,
+      pad = pad,
+      na.rm = na.rm,
+      weight = weight,
+      ...
+    )
+  )
+}
+
+
+#' @rdname ggplot2-ggproto
+#' @format NULL
+#' @usage NULL
+#' @export
+#' 
+
+StatEcdf <- ggproto("StatEcdf", Stat,
+                    compute_group = function(data, scales, weight, n = NULL, pad = TRUE) {
+                      # If n is NULL, use raw values; otherwise interpolate
+                      if (is.null(n)) {
+                        x <- unique(data$x)
+                      } else {
+                        x <- seq(min(data$x), max(data$x), length.out = n)
+                      }
+                      
+                      if (pad) {
+                        x <- c(-Inf, x, Inf)
+                      }
+                      y <- ewcdf(data$x, weights=data$weight/sum(data$weight))(x)
+                      
+                      data.frame(x = x, y = y)
+                    },
+                    
+                    default_aes = aes(y = stat(y)),
+                    
+                    required_aes = c("x")
+)
+```
+
+
+```{r}
+filter_graph_data <- function(clean_data, group_columns, metric_name){
+  graph_data <- clean_data %>% 
+    {if(!is.null(group_columns)) group_by_at(., .vars=vars(all_of(group_columns))) else .} %>% 
+    mutate(group_households = sum(households)) %>% 
+    mutate(group_household_weights = households/group_households) %>% 
+    arrange(!!sym(metric_name)) %>% 
+    mutate(group_percentile = cumsum(households * group_household_weights),
+           overall_percentile = cumsum(households)/sum(households)
+           ) %>% 
+    ungroup()
+  return(graph_data)
+}
+
+graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
+```
+
+
+```{r}
+grouped_weighted_metrics <- function(graph_data, 
+                                         group_columns, 
+                                         metric_name, 
+                                         metric_cutoff_level, 
+                                         upper_quantile_view, 
+                                         lower_quantile_view){
+  # grouped_weighted_medians <- graph_data %>% 
+  #    group_by_at(.vars=vars(all_of(group_columns))) %>% 
+  #    summarise(metric_median = if( sum(!is.na(households))<3 ){NA} else { weighted.median(!!sym(metric_name), households, na.rm=TRUE)})
+  
+  weighted_metrics <- graph_data %>% 
+    {if(!is.null(group_columns)) group_by_at(., .vars=vars(all_of(group_columns))) else .} %>% 
+     summarise(household_count = sum(households),
+               total_na = sum(is.na(!!sym(metric_name)) * households, na.rm = TRUE), 
+               households_below_cutoff = sum((!!sym(metric_name) < metric_cutoff_level) * households, na.rm = TRUE), 
+               metric_max = max(!!sym(metric_name), na.rm = TRUE),
+               metric_min = min(!!sym(metric_name), na.rm = TRUE),
+               metric_mean = weighted.mean(x=!!sym(metric_name), w=households, na.rm = TRUE),  
+               metric_median = if( sum(!is.na(households))<3 ){NA} else { weighted.quantile(x=!!sym(metric_name), w=households, probs=c(.5), na.rm=TRUE)},
+               metric_upper = if( sum(!is.na(households))<3 ){NA} else { weighted.quantile(x=!!sym(metric_name), w=households, 
+                                                                                            probs=c(upper_quantile_view), na.rm=TRUE)},
+               metric_lower = if( sum(!is.na(households))<3 ){NA} else { weighted.quantile(x=!!sym(metric_name), w=households, 
+                                                                                            probs=c(lower_quantile_view), na.rm=TRUE)}) %>% 
+    mutate(households_pct = household_count/sum(household_count),
+           pct_in_group_below_cutoff = households_below_cutoff/household_count,
+           pct_total_below_cutoff = households_below_cutoff/sum(households_below_cutoff))
+  
+  # overall_weighted_metrics <- graph_data %>% ungroup() %>%
+  #   summarise(metric_median = if( sum(!is.na(households))<3 ){NA} else { weighted.quantile(x=!!sym(metric_name), w=households, probs=c(.5), na.rm=TRUE)},
+  #             metric_upper = if( sum(!is.na(households))<3 ){NA} else { weighted.quantile(x=!!sym(metric_name), w=households, 
+  #                                                                                           probs=c(upper_quantile_view), na.rm=TRUE)},
+  #             metric_lower = if( sum(!is.na(households))<3 ){NA} else { weighted.quantile(x=!!sym(metric_name), w=households, 
+  #                                                                                           probs=c(lower_quantile_view), na.rm=TRUE)}
+  #   )
+  
+#  all_groups <- as.data.frame(matrix(rep("All",length(group_columns)),nrow=1))
+#  names(all_groups) <- group_columns
+#  overall_weighted_median <- as_tibble(cbind(all_groups, overall_weighted_median))
+  
+#  weighted_quantiles <- bind_rows(grouped_weighted_medians,overall_weighted_median) %>% ungroup() %>% 
+#    mutate_at(.vars=vars(all_of(group_columns)), .funs=as.factor)
+  
+#  return(weighted_quantiles)
+  return(weighted_metrics)
+}
+
+calculate_weighted_metrics <- function(graph_data, 
+                                         group_columns, 
+                                         metric_name, 
+                                         metric_cutoff_level, 
+                                         upper_quantile_view, 
+                                         lower_quantile_view){
+  
+  weighted_metrics <- grouped_weighted_metrics(graph_data, 
+                                         group_columns=NULL, 
+                                         metric_name, 
+                                         metric_cutoff_level, 
+                                         upper_quantile_view, 
+                                         lower_quantile_view)
+  
+  if(!is.null(group_columns)){
+    all_groups <- as.data.frame(matrix(rep("All",length(group_columns)),nrow=1))
+    names(all_groups) <- group_columns
+    weighted_metrics <- as_tibble(cbind(all_groups, weighted_metrics))
+    
+    grouped_weighted_metrics <- grouped_weighted_metrics(graph_data, 
+                                         group_columns=group_columns, 
+                                         metric_name, 
+                                         metric_cutoff_level, 
+                                         upper_quantile_view, 
+                                         lower_quantile_view)
+    
+    weighted_metrics <- bind_rows(grouped_weighted_metrics,weighted_metrics) %>% ungroup() %>% 
+      mutate_at(.vars=vars(all_of(group_columns)), .funs=as.factor)
+    
+    
+  }else{
+    weighted_metrics <- data.frame(group=as.factor(rep("All", nrow(weighted_metrics))), weighted_metrics)
+  }
+  
+  return(weighted_metrics)
+                                         }
+
+# weighted_metrics <- calculate_weighted_metrics(graph_data, 
+#                                          group_columns, 
+#                                          metric_name, 
+#                                          metric_cutoff_level, 
+#                                          upper_quantile_view, 
+#                                          lower_quantile_view)
+# weighted_metrics
+```
+
+
+```{r}
+density_chart <- function(graph_data, 
+                          metric_name, 
+                          metric_label,
+                          group_columns, 
+                          metric_cutoff_level, 
+                          metric_cutoff_label, 
+                          chart_title, 
+                          chart_subtitle){
+  
+  if(!is.null(group_columns)){
+    pal_n <- length(levels(interaction(graph_data[,group_columns])))
+  } else {
+    pal_n <- 1
+  }
+  
+  movie <- "Darjeeling1" #"GrandBudapest1"
+  #pal <- wes_palette(name=movie, n=pal_n, type="continuous")
+  pal <- sample(x=wes_palette(name=movie, n=pal_n, type="continuous"), 
+                size = pal_n, 
+                replace = FALSE)
+  
+  weighted_metrics <- calculate_weighted_metrics(graph_data, 
+                                         group_columns, 
+                                         metric_name, 
+                                         metric_cutoff_level, 
+                                         upper_quantile_view, 
+                                         lower_quantile_view)
+  
+  
+  chart <- graph_data %>%
+    # ggplot(aes(x=!!sym(metric_name), 
+    #            weight=group_household_weights,
+    #            color=interaction(!!!sym(group_columns)),
+    #            fill=interaction(!!!sym(group_columns))
+    # )) + 
+    ggplot(aes_string(x=metric_name, 
+               weight="group_household_weights",
+               color=if(is.null(group_columns)){group_columns}else{
+                 #interaction(!!!sym(group_columns))
+                 paste0("interaction(", paste0(group_columns, collapse =  ", "), ")")
+                 },
+               fill=if(is.null(group_columns)){group_columns}else{
+                 #interaction(!!!sym(group_columns))
+                 paste0("interaction(", paste0(group_columns, collapse =  ", "), ")")
+                 },
+               linetype=if(is.null(group_columns)){group_columns}else{
+                 #interaction(!!!sym(group_columns))
+                 paste0("interaction(", paste0(group_columns, collapse =  ", "), ")")
+                 }
+    )) + 
+    stat_ewcdf(geom='line',  alpha=1) + 
+    stat_ewcdf(aes(ymin=..y.., ymax=1), geom='ribbon', alpha=.1) + 
+    theme_minimal() + 
+    scale_color_manual(values=pal) + 
+    scale_fill_manual(values=pal) + 
+    scale_x_continuous(labels = scales::dollar_format(accuracy=1),
+                       breaks=seq(from=0,to=100,by=10), 
+                       minor_breaks=seq(from=0,to=100,by=5),
+                       name=metric_label) + 
+    scale_y_continuous(labels = scales::label_percent(accuracy = 1), 
+                       breaks=seq(from=0,to=1,by=.1), 
+                       minor_breaks=seq(from=0,to=1,by=.05),
+                       name="Proportion of Households") + 
+    theme(legend.justification = c(1, 1), 
+          legend.position = c(0.25, 1), 
+          legend.title=element_blank(),
+          panel.background = element_rect(fill="#f1f1f1"),
+          panel.grid.major = element_line(color="#DCDCDC"),
+          panel.grid.minor = element_line(color="#DCDCDC"),
+          axis.line = element_line(color = "black",
+                                   size = 0.5, 
+                                   linetype = "solid"),
+          axis.text.x=element_text(angle=45, 
+                                   hjust=1,
+                                   vjust=NULL,
+                                   margin=margin(t = 5, 
+                                                 r = 0, 
+                                                 b = 0, 
+                                                 l = 0, 
+                                                 unit = "pt")),
+          axis.text.y=element_text(angle=10, 
+                                   hjust=1,
+                                   vjust=0.5,
+                                   margin=margin(t = 0, 
+                                                 r = 5, 
+                                                 b = 0, 
+                                                 l = 0, 
+                                                 unit = "pt")),
+          axis.ticks=element_line(color = "black"),
+          axis.ticks.length = unit(-0.1, "cm")) + 
+    # geom_segment(y = 0,
+    #              x = as.numeric(weighted_medians[weighted_medians$group=="All",c("median_eroi")]),
+    #              yend = 0.5,
+    #              xend = as.numeric(weighted_medians[weighted_medians$group=="All",c("median_eroi")]),
+    #              color="gray25",
+    #              linetype="dotted",
+    #              size=0.25,
+    #              alpha=0.5) +
+    # geom_segment(y = 0.5,
+    #              x = as.numeric(weighted_medians[weighted_medians$group=="All",c("median_eroi")]),
+    #              yend = 0.5,
+    #              xend = 0,
+    #              color="gray25",
+    #              linetype="dotted",
+    #              size=0.25,
+    #              alpha=0.5) +
+    geom_vline(xintercept = metric_cutoff_level,
+               linetype="dotted",
+               color = "red",
+               size=1.0,
+               alpha=0.75) +
+    annotate("text",
+             y = 0,
+             x = metric_cutoff_level,
+             angle = 0,
+             color="red",
+             label = metric_cutoff_label,
+             vjust = -0.5,
+             hjust = 0.0,
+             parse = FALSE,
+             alpha=0.75) +
+    # annotate("text", 
+    #          y = 0, 
+    #          x = max(weighted_medians$median_eroi), 
+    #          angle = 0, 
+    #          color="gray25", 
+    #          label = "Median", 
+    #          vjust = -0.25, 
+    #          hjust = -0.1, 
+    #          parse = FALSE, 
+    #          alpha=0.75) + 
+    labs(
+      title=chart_title,
+      subtitle=chart_subtitle,
+      caption=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("By ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          }) + 
+    coord_flip(xlim=c(0,100),
+               ylim=c(0,1),
+               expand=FALSE)
+  
+  return(chart)
+}
+```
+
+
+```{r}
+make_all_charts <- function(clean_data,
+                            group_columns,
+                            metric_name,
+                            metric_label, 
+                            metric_cutoff_level,
+                            metric_cutoff_label,
+                            upper_quantile_view,
+                            lower_quantile_view,
+                            chart_title,
+                            chart_subtitle){
+  graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
+  
+  weighted_metrics <- calculate_weighted_metrics(graph_data, 
+                                                 group_columns, 
+                                                 metric_name, 
+                                                 metric_cutoff_level, 
+                                                 upper_quantile_view, 
+                                                 lower_quantile_view)
+  
+  density_chart <- density_chart(graph_data, 
+                                 metric_name, 
+                                 metric_label, 
+                                 group_columns, 
+                                 metric_cutoff_level, 
+                                 metric_cutoff_label, 
+                                 chart_title, 
+                                 chart_subtitle)
+  
+  return(density_chart)
+}
+```
+
+
+
+We are primarily interested in how households of different characteristics are distributed according to their Net Energy Ratio, which represents how many net dollars are earned by a household for every dollar they spend on energy. In this context we will refer to NER as the "Net Energy Income Ratio", or the "Net Household Income Earned for Every Dollar Spent on Energy."
+
+
+```{r}
+graph_data <- filter_graph_data(clean_data=clean_data, 
+                                group_columns=group_columns, 
+                                metric_name=metric_name)
+density_chart(graph_data=graph_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+              metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+
+```{r}
+group_columns <- c("in_poverty")
+
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+
+```{r}
+group_columns=c("income_bracket")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+cross_tab <- calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F,
+                            bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+cross_tab
+```
+
+```{r}
+group_columns=c("primary_heating_fuel")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r}
+clean_data$simplified_primary_heating_fuel <- as.factor(ifelse(clean_data$primary_heating_fuel=="ELECTRICITY","ELECTRICITY", 
+                                                               ifelse(clean_data$primary_heating_fuel %in% c("UTILITY GAS","BOTTLED GAS"), "GAS", 
+                                                                      "OTHER")))
+group_columns=c("simplified_primary_heating_fuel")
+
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r}
+clean_data$solar_primary_heating_fuel <- as.factor(ifelse(clean_data$primary_heating_fuel=="ELECTRICITY","ELECTRICITY", 
+                                                               ifelse(clean_data$primary_heating_fuel %in% c("UTILITY GAS","BOTTLED GAS"), "GAS", 
+                                                                      ifelse(clean_data$primary_heating_fuel=="SOLAR","SOLAR",
+                                                                      "OTHER"))))
+group_columns=c("solar_primary_heating_fuel")
+
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r}
+group_columns=c("solar_primary_heating_fuel", "in_poverty")
+
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+
+```{r}
+group_columns=c("occupancy_type")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r}
+group_columns=c("number_of_units")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r}
+group_columns=c("year_constructed")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r}
+group_columns=c("state_code_usps")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r eval=FALSE}
+group_columns=c("occupancy_type")
+make_all_charts(clean_data=clean_data,
+                group_columns=group_columns,
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+```
+
+```{r eval=FALSE, results='asis'}
+calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, group_columns, metric_name), 
+                                               group_columns, 
+                                               metric_name, 
+                                               metric_cutoff_level, 
+                                               upper_quantile_view, 
+                                               lower_quantile_view) %>% t() %>% 
+  kable() %>% kable_styling("striped", full_width = F) %>% 
+  column_spec(1, bold = T, border_right = T) %>%
+  footnote(general=if(is.null(group_columns)){
+        group_columns
+        } else {
+          paste0("Grouped By: ",paste(group_columns,
+                             sep="_",
+                             collapse="+"))
+          })
+```
+
+```{r eval=FALSE}
+cliff_chart <- function(){}
+
+ggplot(data=clean_data, aes(x=eroi, y=dear, fill=income_bracket, color=income_bracket)) + 
+  xlim(c(0,100)) + 
+  ylim(c(0,1)) + 
+  geom_point(aes(size=households), alpha=0.1, position="jitter") + 
+  geom_hline(yintercept = .9) + 
+  geom_vline(xintercept = 10) + 
+  geom_smooth(method="lm",
+              se=FALSE,
+              fullrange=TRUE)
+```
+
+
+
+
+
+```{r eval=FALSE}
+scatter_chart <- function(){}
+
+ggplot(data=clean_data, aes(x=annual_income, y=mean_energy_cost, color=income_bracket)) + 
+  xlim(c(0,200000)) +
+  geom_point(aes(size=households), alpha=0.1) + 
+  geom_smooth(method=lm,
+                se=FALSE,
+                fullrange=TRUE)
+```

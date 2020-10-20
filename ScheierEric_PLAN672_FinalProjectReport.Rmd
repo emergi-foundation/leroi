@@ -3,9 +3,9 @@ title: 'PLAN 672: Final Project Report'
 author: "Eric Scheier"
 date: "`r format(Sys.time(), '%Y-%B-%d')`"
 output:
-  tufte::tufte_handout: default
-  pdf_document: default
   html_document: default
+  pdf_document: default
+  tufte::tufte_handout: default
   word_document: default
 ---
 
@@ -144,11 +144,11 @@ Lower income groups may have variable or seasonal income that might not show up 
 
 # Methods
 
-I cleaned the [LEAD]() and [ERST]() data according to the process outlined in the linked data munging scripts. In summary, this process involved:
+I cleaned the [LEAD](https://github.com/emergi-foundation/leroi/blob/master/lead_munging.md) and [ERST](https://github.com/emergi-foundation/leroi/blob/master/erst_munging.md) data according to the process outlined in the linked data munging scripts. In summary, this process involved:
 
 + *Trivial Steps*
-++ Join LEAD ↔ ACS by GEOID
-++ Join ERST ↔ EIA by Utility ID
+++ Join LEAD with ACS by GEOID
+++ Join ERST with EIA by Utility ID
 ++ Compute row-wise statistics
 + *Non-Trivial Steps*
 ++ Remove Utility overlap
@@ -505,7 +505,7 @@ A set of household characteristics are collected as part of the LEAD dataset ass
 + `min_units`: the minimum number of living units in the building that contains the household.
 + `detached`: whether the household is attached or detached from neighboring units.
 
-```{r fig.margin=FALSE, fig.fullwidth = TRUE, fig.keep='all', fig.cap='Relationships among household characteristics and EROI'}
+```{r household_pair_plot, fig.margin=FALSE, fig.fullwidth = TRUE, fig.keep='all', fig.cap='Relationships among household characteristics and EROI'}
 # Household Characteristics Pair Plot
 household_characteristics <- c(
   "occupancy_type",
@@ -518,17 +518,19 @@ household_characteristics <- c(
   "ownership_type",
   "mean_eroi"
 )
+if(!file.exists("./household_pair_plot.png")){
+  household_pair_plot <- ggpairs(clean_data, aes(color = ownership_type, weight=ownership_type_household_weights/3, alpha = 0.4),
+                       columns = household_characteristics,
+                       upper = list(
+                         continuous = wrap("cor", size = 1.5, alignPercent = 1)),
+                       progress=FALSE) + theme_minimal(base_size = 5) + 
+    theme(axis.text=element_text(size=3.0))
+  
+  ggsave("./household_pair_plot.png", plot=household_pair_plot, width=10,height=7.5,units="in")
+}
 
-household_pair_plot <- ggpairs(clean_data, aes(color = ownership_type, weight=ownership_type_household_weights/3, alpha = 0.4),
-                     columns = household_characteristics,
-                     upper = list(
-                       continuous = wrap("cor", size = 1.5, alignPercent = 1)),
-                     progress=FALSE) + theme_minimal(base_size = 5) + 
-  theme(axis.text=element_text(size=3.0))
-
-ggsave("./household_pair_plot.png", plot=household_pair_plot, width=10,height=7.5,units="in")
-
-suppressMessages(print(household_pair_plot))
+#suppressMessages(print(household_pair_plot))
+knitr::include_graphics("./household_pair_plot.png")
 ```
 
 
@@ -542,7 +544,7 @@ A set of demographic characteristics are calculated from the ACS. These include:
 + `pct_non_white`: The proportion of the census tract population that is not white.
 + `median_income`: The median income of the census tract's population.
 
-```{r fig.cap='Relationships among demographic characteristics and EROI'}
+```{r demographic_pair_plot, fig.margin=FALSE, fig.fullwidth = TRUE, fig.keep='all', fig.cap='Relationships among demographic characteristics and EROI'}
 # Demographic Characteristics Pair Plot
 demographic_characteristics <- c(
   "pct_non_male",
@@ -554,14 +556,17 @@ demographic_characteristics <- c(
   "mean_eroi"
 )
 
-demographic_pair_plot <- ggpairs(clean_data, aes(color = ownership_type, weight=ownership_type_household_weights/3, alpha = 0.4),
-                     columns = demographic_characteristics,
-                     upper = list(
-                       continuous = wrap("cor", size = 1.5, alignPercent = 1)),
-                     progress=FALSE) + theme_minimal(base_size = 5) + 
-  theme(axis.text=element_text(size=3.0))
+if(!file.exists("./demographic_pair_plot.png")){
+  demographic_pair_plot <- ggpairs(clean_data, aes(color = ownership_type, weight=ownership_type_household_weights/3, alpha = 0.4),
+                       columns = demographic_characteristics,
+                       upper = list(
+                         continuous = wrap("cor", size = 1.5, alignPercent = 1)),
+                       progress=FALSE) + theme_minimal(base_size = 5) + 
+    theme(axis.text=element_text(size=3.0))
+  
+  ggsave("./demographic_pair_plot.png", plot=demographic_pair_plot, width=10,height=7.5,units="in")
+}
 
-ggsave("./demographic_pair_plot.png", plot=demographic_pair_plot, width=10,height=7.5,units="in")
-
-suppressMessages(print(demographic_pair_plot))
+#suppressMessages(print(demographic_pair_plot))
+knitr::include_graphics("./demographic_pair_plot.png")
 ```

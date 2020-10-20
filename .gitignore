@@ -117,6 +117,7 @@ venv.bak/
 *.shx
 *.xml
 *.geojson
+*.ini
 
 *.gdb
 
@@ -126,7 +127,14 @@ venv.bak/
 *.csv
 *.dat
 
+*.feather
+*.fst
+
+*.xls
 *.xlsx
 
 # Results
 *.pdf
+*.html
+*.tex
+*.png

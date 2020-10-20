@@ -1,0 +1,49 @@
+---
+title: "TIGRIS Munging"
+author: "Eric Scheier"
+date: "10/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+get_tracts <- function(state_abbr, refresh=FALSE){
+  # if we have saved them, then load them if refresh is FALSE
+  state_tracts <- tracts(cb = TRUE, year = 2016, class="sf", state=state_abbr, refresh=refresh)
+  Sys.sleep(5)
+  return(state_tracts)
+}
+
+all_census_tracts <- lapply(unique(data$state_abbr), get_tracts)
+census_tracts <- do.call(rbind, all_census_tracts)
+
+census_tracts$gisjoin <- paste0("G",paste(census_tracts$STATEFP,
+                               census_tracts$COUNTYFP,
+                               census_tracts$TRACTCE,
+                               sep="0"))
+```
+
+```{r}
+head(census_tracts)
+```
+
+
+```{r}
+# save multipolygon
+st_write(census_tracts, "census_tracts.geojson", delete_dsn = TRUE)
+```
+
+```{r}
+#state
+states <- states(cb = FALSE, resolution = "500k", year = 2016, class="sf", refresh=TRUE)
+# states <- subset(states, GEOID=="37")
+# states <- st_transform(states, crs=st_crs(data_shp))
+```
+
+```{r}
+# save multipolygon
+st_write(states, "states.geojson", delete_dsn = TRUE)
+```

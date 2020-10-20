@@ -14,11 +14,11 @@ knitr::opts_chunk$set(echo = TRUE)
 library(scales)
 library(tidyverse)
 library(readxl)
+library(tigris)
 ```
 # Introduction
 
 ```{r params}
-energy_poverty_line <- 0.10
 acs_date <- 2016
 youngest_building <- acs_date - 1
 oldest_building <- 1900 # this assumption is not used in the ultimate analysis
@@ -41,10 +41,26 @@ For this project, I will use the data which displays the results by census tract
 # Acquiring Data
 
 ```{r cache=TRUE}
-base_url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/831ac481-1a60-4f87-a887-15b310ffff53/download/"
+#"ami68tractshnc" base_url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/831ac481-1a60-4f87-a887-15b310ffff53/download/"
 
+# FPL15_TRACT_SH_NC
+base_url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/93688609-f649-4f12-98a2-501d2950cadb/download/"
 
-file_name <- "ami68tractshnc"
+# AMI68_STATE-CITY-COUNTY_SH_NC
+# FPL15_STATE-CITY-COUNTY_SH_NC
+
+state <- "nc"
+income_metric <- "fpl15" #"ami68"
+geographic_scope <- "tract" #statecitycounty
+
+save_file_name <- paste0(income_metric,
+                    geographic_scope,
+                    state)
+
+file_name <- paste0(income_metric,
+                    geographic_scope,
+                    "sh",
+                    state)#"ami68tractshnc"
 data_url <- paste0(base_url,file_name,".csv")
 desired_name <- paste0(file_name,".csv")
 desired_path <- file.path(desired_name)
@@ -117,12 +133,11 @@ summary(data)
 
 Munging Steps:
 
-+ Seperate the `AMI68` column into `occupancy_type` and `income_bracket` columns.
++ Seperate the `AMI68` or `FPL15` column into `occupancy_type` and `income_bracket` columns.
 + Create `min_age` from `YBL INDEX`.
 + Create `min_units` from `BLD INDEX`.
 + Create `detached` from `BLD INDEX`.
 + Create the Energy Expenditures Indicator `mean_energy_cost`.
-+ Create the Energy Burden Indicator `mean_energy_burden`.
 + Remove rows where `UNITS<1`, `mean_energy_cost<0`, or `HINCP<0`.
 
 ## Break Out Ownership & Income Bracket
@@ -133,7 +148,7 @@ The data combines the unit's ownership status (`OWNER` vs. `RENTER`) and income 
 #Seperate the `AMI68` column into `occupancy_type` and `income_bracket` columns
 
 data <- data %>% 
-  separate(col="AMI68",
+  separate(col=toupper(income_metric),
            into=c("occupancy_type", "income_bracket"), 
            sep = " ", 
            remove = FALSE, 
@@ -240,23 +255,14 @@ data <- merge(data, hfl_dict[c("HFL INDEX","primary_heating_fuel")],
 
 
 
-## Create the Energy Burden Indicators
+## Calculate the Total Energy Cost
 
-Creating the final metric of average energy burden for each cohort is as simple as adding up the montly expenditures on electricity (`ELEP CAL`), natural gas (`GASP CAL`), and other fuels (`FULP`), and dividing this by the cohort's average monthly income (`HINCP / 12.0`).
+Calculating the total energy cost for each cohort is as simple as adding up the montly expenditures on electricity (`ELEP CAL`), natural gas (`GASP CAL`), and other fuels (`FULP`).
 
 ```{r}
 # Create the Energy Expenditures Indicator `mean_energy_cost`.
 
 data$mean_energy_cost <- data$`ELEP CAL` + data$`GASP CAL` + data$FULP
-
-# Create the Energy Burden Indicator `mean_energy_burden`.
-
-data$mean_energy_burden <- data$mean_energy_cost / (data$HINCP/12.0)
-
-# Create the Energy Return on Investment Indicator `eroi`
-
-data$mean_eroi <- data$HINCP / (12*data$mean_energy_cost)
-
 ```
 
 ## Clean-up
@@ -285,9 +291,7 @@ data <- select(data,
                `min_age`, 
                `min_units`, 
                `detached`,
-               `mean_energy_cost`,
-               `mean_energy_burden`,
-               `mean_eroi`)
+               `mean_energy_cost`)
 ```
 
 Rename columns to remove spaces:
@@ -319,14 +323,6 @@ data <- separate(data,
                  convert=FALSE)
 ```
 
-## Adding an Energy Poverty Response Variable
-
-For further analysis, I will add a designation of whether a cohort is, on average, in energy poverty depending on whether the mean energy burden is above `r label_percent()(energy_poverty_line)`.
-
-```{r}
-data$energy_poverty <- as.logical(data$mean_energy_burden > energy_poverty_line)
-```
-
 ## Remove Fractional Units
 
 The estimation procedure used by the DOE results in an estimated number of occupied housing units meeting the subset characteristics (`UNITS`, renamed as `households`) and displays the number of American Community Survey responses that contribute to the estimate of energy expenditures (`COUNT`, renamed as `acs_responses`). We first remove any categories that have fewer than 1 unit represented, since this is not physically possible.
@@ -334,7 +330,7 @@ The estimation procedure used by the DOE results in an estimated number of occup
 This results in removing `r 100*sum(data$households<1)/length(data$households)`% of the available rows (gross: `r sum(data$households<1)` rows of `r length(data$households)`). This is a total of `r sum(data$households[data$households<1])` housing units, or `r 100*sum(data$households[data$households<1])/sum(data$households)`% of the estimated total `r sum(data$households)` units in the state.
 
 ```{r}
-weird_rows <- data$annual_income<1 | data$mean_energy_cost<1
+weird_rows <- data$annual_income<=0 | data$mean_energy_cost<=0 | data$annual_income < (12 * data$mean_energy_cost)
 # | data$households<1 "or those which represent les than a single housing unit "
 # | data$mean_energy_burden>1 "or energy costs greater than income"
 weird_data <- data[weird_rows,]
@@ -344,18 +340,20 @@ weird_rate <- nrow(weird_data)/(nrow(data)+nrow(weird_data))
 weird_unit_rate <- sum(weird_data$households)/(sum(data$households)+sum(weird_data$households))
 ```
 
-I have seperated any cohorts with incomes or energy costs less than $1 into another dataset for analysis. This represents approximately `r round(100*weird_unit_rate,0)`% of the housing units and `r round(100*weird_rate,0)`% of the examined cohorts, so it will be important to make sure that this subset does not contain systematic bias.
+I have seperated any cohorts with incomes or energy costs less than or equal to $0 into another dataset for analysis. This represents approximately `r round(100*weird_unit_rate,0)`% of the housing units and `r round(100*weird_rate,0)`% of the examined cohorts, so it will be important to make sure that this subset does not contain systematic bias.
 
 ```{r}
-write_csv(weird_data, "weird_lead.csv")
-write_csv(data,"clean_lead.csv")
+write_csv(weird_data, paste0("weird_lead_",save_file_name,".csv"))
+
+clean_file_name <- paste0("clean_lead_",save_file_name,".csv")
+write_csv(data,clean_file_name)
 
 summary(data)
 str(data)
 ```
 
 ```{r}
-data_reloaded <- read_csv(file.path(getwd(),"clean_lead.csv"),
+data_reloaded <- read_csv(file.path(getwd(),clean_file_name),
                           col_types=cols(
                             geo_id = readr::col_character(),
                             state_id = readr::col_character(),
@@ -377,9 +375,7 @@ data_reloaded <- read_csv(file.path(getwd(),"clean_lead.csv"),
                             min_age = col_double(),
                             min_units = col_double(),
                             detached = readr::col_factor(),
-                            mean_energy_cost = col_double(),
-                            mean_energy_burden = col_double(),
-                            energy_poverty = col_logical()
+                            mean_energy_cost = col_double()
                             ))
 
 all(data_reloaded == data, na.rm=TRUE)
@@ -453,15 +449,15 @@ final_acs_variables <- c("geo_id",
                         "median_income",
                         "acs_total_households")
 
-data <- left_join(data, select(acs_features, final_acs_variables) %>% mutate(geo_id=as.character(geo_id)), by="geo_id")
+data <- left_join(data, select(acs_features, all_of(final_acs_variables)) %>% mutate(geo_id=as.character(geo_id)), by="geo_id")
 
-write_csv(data,"clean_lead.csv")
+write_csv(data,clean_file_name)
 ```
 
 
 
 ```{r}
-data_reloaded <- read_csv(file.path(getwd(),"clean_lead.csv"),
+data_reloaded <- read_csv(file.path(getwd(),clean_file_name),
                           col_types=cols(
                             geo_id = readr::col_character(),
                             state_id = readr::col_character(),
@@ -484,8 +480,6 @@ data_reloaded <- read_csv(file.path(getwd(),"clean_lead.csv"),
                             min_units = col_double(),
                             detached = readr::col_factor(),
                             mean_energy_cost = col_double(),
-                            mean_energy_burden = col_double(),
-                            energy_poverty = col_logical(),
                             pct_non_male = col_double(), 
                             median_age = col_double(),
                             pct_no_high_school = col_double(),
@@ -499,7 +493,7 @@ summary(data_reloaded)
 ```
 
 ## Bring in Electric Service Provider Data
-```{r}
+```{r eval=FALSE}
 erst <- read_csv(file.path(getwd(),"clean_erst.csv"),
                           col_types=cols(
                             tract_id = readr::col_character(),
@@ -525,7 +519,7 @@ write_csv(data, "clean_lead.csv")
 ```
 
 
-```{r}
+```{r eval=FALSE}
 data_reloaded <- read_csv(file.path(getwd(),"clean_lead.csv"),
                           col_types=cols(
                             geo_id = readr::col_character(),
@@ -549,8 +543,6 @@ data_reloaded <- read_csv(file.path(getwd(),"clean_lead.csv"),
                             min_units = col_double(),
                             detached = readr::col_factor(NULL),
                             mean_energy_cost = col_double(),
-                            mean_energy_burden = col_double(),
-                            energy_poverty = col_logical(),
                             pct_non_male = col_double(), 
                             median_age = col_double(),
                             pct_no_high_school = col_double(),
