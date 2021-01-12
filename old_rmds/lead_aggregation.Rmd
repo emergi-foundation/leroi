@@ -1,0 +1,171 @@
+---
+title: "LEAD Aggregation"
+author: "Eric Scheier"
+date: "10/16/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+is_final=FALSE
+is_preview=TRUE
+is_draft=TRUE
+set.seed(123)
+
+knitr::opts_chunk$set(comment='##', 
+                      collapse=ifelse(is_preview,TRUE,!is_draft),
+                      echo=ifelse(is_preview,FALSE,is_draft),
+                      eval=TRUE,
+                      warning=ifelse(is_preview,FALSE,is_draft),
+                      error=ifelse(is_preview,FALSE,is_draft),
+                      results=ifelse(is_final,'hide',ifelse(is_preview,'hide','asis')),
+                      fig.keep='all',
+                      message=ifelse(is_preview,FALSE,is_draft),
+                      include=ifelse(is_preview,TRUE,is_draft),
+                      tidy=TRUE,
+                      cache=FALSE,
+                      fig.margin=FALSE,
+                      fig.fullwidth = FALSE
+                      )
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+kable(knitr::opts_chunk$get() %>% enframe())
+```
+
+
+```{r}
+library(sf)
+library(MASS)
+library(scales)
+library(caret)
+library(spatstat)
+library(GGally)
+library(ggpubr)
+library(patchwork)
+library(mgcv)
+library(tidyselect)
+library(RColorBrewer)
+library(wesanderson)
+library(tigris)
+library(readxl)
+library(tidyverse)
+# library(viridis)
+source("lead_munging.R")
+source("charts.R")
+```
+
+```{r eval=FALSE}
+for(income_metric in c("SMI","AMI","FPL")){#"AMI","FPL")){#SMI
+  for(geographic_scope in c("Census Tracts","State, Counties, Cities")){
+    states <- "all" #c("nc","sc" ,"ca") #c("nc","ca") #  "nc" #c("nc","sc") #
+    save_format <- "raw" #replica #lead #raw
+    save_ext="csv"#"fst",#
+    refresh <- FALSE
+    acs_version <- 2018
+
+    lead_lead <- get_multiple_states(states=states,
+                                income_metric=income_metric,
+                                geographic_scope=geographic_scope,
+                                acs_version=acs_version,
+                                refresh=refresh,
+                                save_format=save_format,
+                                save_ext=save_ext,
+                        load=FALSE)
+  }
+}
+```
+
+```{r}
+states <- c("nc","sc" ,"ca") #"all" #c("nc","sc" ,"ca") #c("nc","ca") #  "nc" # 
+income_metric <- "ami68"#"AMI" #"fpl15" #
+geographic_scope <- "tract"#"Census Tracts" #statecitycounty
+load_format <- "raw" #replica #lead #raw
+save_ext <- "csv"#"fst",#
+save_format <- "lead"
+refresh <- FALSE
+acs_version <- 2016
+```
+
+
+```{r}
+old_lead <- get_multiple_states(states=states,
+                                income_metric=income_metric,
+                                geographic_scope=geographic_scope,
+                                acs_version=acs_version,
+                                refresh=refresh,
+                                load_format=load_format,
+                                save_format=save_format,
+                            save_ext = save_ext,
+                            parallel=TRUE)
+```
+
+```{r}
+# states <- "all" #c("nc","sc" ,"ca") #c("nc","sc" ,"ca") #c("nc","ca") #  "nc" # 
+income_metric <- "AMI" #"fpl15" #
+geographic_scope <- "Census Tracts" #statecitycounty
+# load_format <- "raw" #replica #lead #raw
+# save_ext <- "csv"#"fst",#
+# save_format <- "raw"
+refresh <- FALSE
+acs_version <- 2018
+```
+
+```{r}
+new_lead_raw <- get_multiple_states(states=states,
+                                income_metric=income_metric,
+                                geographic_scope=geographic_scope,
+                                acs_version=acs_version,
+                                refresh=refresh,
+                                load_format=load_format,
+                                save_format="raw",
+                            save_ext = save_ext,
+                            parallel=TRUE)
+```
+
+```{r}
+new_lead_raw_sample <- sample_n(new_lead, 100, replace = FALSE, weight = replace(new_lead$UNITS, list = new_lead$UNITS<0, values = c(0)))
+```
+
+```{r}
+new_lead <- get_multiple_states(states=states,
+                                income_metric=income_metric,
+                                geographic_scope=geographic_scope,
+                                acs_version=acs_version,
+                                refresh=refresh,
+                                load_format=load_format,
+                                save_format=save_format,
+                            save_ext = save_ext,
+                            parallel=TRUE)
+
+head(new_lead)
+```
+
+
+```{r}
+clean_lead_sample <- raw_to_lead(new_lead_raw_sample, acs_version=2018)
+head(clean_lead_sample)
+```
+
+```{r}
+clean_replica_sample <- lead_to_replica(clean_lead=clean_lead_sample)
+head(clean_replica_sample)
+```
+
+
+```{r eval=FALSE}
+acs_text <- as.character(acs_version)
+if(acs_version==2016){
+  acs_text <- "sh"
+}
+
+save_file_name <- toupper(paste(income_metric,
+                                geographic_scope,
+                                acs_text,
+                                paste(sort(states),  collapse = "_"), 
+                                sep = "_"))#"AMI68_TRACT_SH_NC"
+testy <- read_csv("")
+```
+

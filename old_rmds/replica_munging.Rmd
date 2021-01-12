@@ -1,0 +1,215 @@
+---
+title: 'Data Munging: Solar Energy Evolution and Diffusion Studies (SEEDS) Rooftop Energy Potential of Low Income Communities in America (REPLICA) Dataset'
+author: "Eric Scheier"
+date: '`r format(Sys.Date(), "%Y-%B-%d")`'
+output:
+  html_document: default
+  md_document:
+    variant: markdown_github
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+is_final=FALSE
+is_preview=TRUE
+is_draft=TRUE
+set.seed(123)
+
+knitr::opts_chunk$set(comment='##', 
+                      collapse=ifelse(is_preview,TRUE,!is_draft),
+                      echo=ifelse(is_preview,FALSE,is_draft),
+                      eval=TRUE,
+                      warning=ifelse(is_preview,FALSE,is_draft),
+                      error=ifelse(is_preview,FALSE,is_draft),
+                      results=ifelse(is_final,'hide',ifelse(is_preview,'hide','asis')),
+                      fig.keep='all',
+                      message=ifelse(is_preview,FALSE,is_draft),
+                      include=ifelse(is_preview,TRUE,is_draft),
+                      tidy=TRUE,
+                      cache=FALSE,
+                      fig.margin=FALSE,
+                      fig.fullwidth = FALSE
+                      )
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+kable(knitr::opts_chunk$get() %>% enframe())
+```
+
+
+```{r}
+library(sf)
+library(MASS)
+library(scales)
+library(caret)
+library(spatstat)
+library(GGally)
+library(ggpubr)
+library(patchwork)
+library(mgcv)
+library(tidyselect)
+library(RColorBrewer)
+library(wesanderson)
+library(tigris)
+library(readxl)
+library(tidyverse)
+# library(viridis)
+source("lead_munging.R")
+source("charts.R")
+```
+
+```{r}
+states <- "all" #c("ca", "nc","sc") # c("nc","ca") #  "nc" #
+# income_metric <- "ami68" #"fpl15" #
+# geographic_scope <- "tract" #statecitycounty
+# format <- "replica" # "lead" #
+# refresh <- FALSE
+
+income_metric <- "FPL" #"AMI" #"fpl15" #
+geographic_scope <- "Census Tracts" #statecitycounty
+refresh <- FALSE
+acs_version <- 2018
+load_format <- "raw" #replica #lead #raw
+save_ext <- "csv"#"fst",#
+save_format <- "lead" #"replica"
+
+version_text <- as.character(acs_version)
+if(acs_version==2016){
+  version_text <- "sh"
+}
+
+base_file_name <- tolower(paste(income_metric,
+                                geographic_scope,
+                                version_text,
+                                paste(states,collapse="_",sep=""), sep = "_"))
+# paste0("data/clean_lead_",base_file_name,".",save_ext)
+```
+
+
+```{r}
+# merged_col_types <- readr::cols(geo_id=readr::col_character(),
+#                          merge_income_bracket=readr::col_factor(),
+#                          replica_units=readr::col_factor(),
+#                          replica_occupancy_type=readr::col_factor(),
+#                          lead_households=readr::col_double(),
+#                          lead_annual_income=readr::col_double(),
+#                          lead_mean_energy_cost=readr::col_double())
+# 
+# lead_types <- readr::cols(geo_id = readr::col_character(), 
+#                   #state_id = readr::col_character(),
+#                   #state = readr::col_character(),
+#                   #county_id = readr::col_character(),
+#                   #county = readr::col_character(),
+#                   #tract_id = readr::col_character(),
+#                   #puma10_code = readr::col_character(),
+#                   #fmr_code = readr::col_character(),
+#                   occupancy_type = readr::col_factor(),
+#                   income_bracket = readr::col_factor(),
+#                   #primary_heating_fuel = readr::col_factor(),
+#                   #number_of_units = readr::col_factor(),
+#                   year_constructed = readr::col_factor(),
+#                   households = col_double(),
+#                   annual_income = col_double(),
+#                   electricity_spend = col_double(),
+#                   gas_spend = col_double(),
+#                   other_spend = col_double(),
+#                   acs_responses = col_double(),
+#                   min_age = col_double(),
+#                   min_units = col_double(),
+#                   detached = readr::col_factor(NULL),
+#                   mean_energy_cost = col_double())
+# 
+
+```
+
+
+```{r}
+raw <- get_multiple_states(states=states,
+                                income_metric=income_metric,
+                                geographic_scope=geographic_scope,
+                                acs_version=acs_version,
+                                refresh=refresh,
+                                load_format="raw",
+                                save_format="lead",
+                            save_ext = save_ext,
+                            parallel=TRUE,
+                            load=TRUE)
+raw$merge_geo_id <- str_pad(as.character(raw$geo_id), width=11, side="left", pad="0")
+```
+
+
+```{r}
+if(save_format=="replica"){
+  
+  lead <- get_multiple_states(states=states,
+                                income_metric=income_metric,
+                                geographic_scope=geographic_scope,
+                                acs_version=acs_version,
+                                refresh=refresh,
+                                load_format="lead",
+                                save_format="replica",
+                            save_ext = save_ext,
+                            parallel=TRUE)
+  lead$merge_geo_id <- str_pad(as.character(lead$geo_id), width=11, side="left", pad="0")
+  
+  replica <- replica_to_lead()
+  replica$merge_geo_id <- str_pad(as.character(replica$geoid), width=11, side="left", pad="0")
+  
+  merge_columns <- c("merge_geo_id", 
+                      "merge_income_bracket", 
+                      "replica_units",
+                      "replica_housing_tenure")
+  
+  # data <- full_join(lead, replica, by=merge_columns)
+  data <- left_join(replica, lead, by=merge_columns)
+  
+  data <- drop_na(data, merge_columns)# %>% nrow()
+  
+  data <- data %>% rename(income_bracket = merge_income_bracket,
+                          number_of_units = replica_units,
+                          housing_tenure = replica_housing_tenure,
+                          households = lead_households,
+                          income = lead_income,
+                          electricity_spend = lead_electricity_spend,
+                          gas_spend = lead_gas_spend,
+                          other_spend = lead_other_spend)
+} else {
+  data <- raw
+}
+
+# save_file_name <- toupper(paste(income_metric,
+#                                 geographic_scope,
+#                                 "sh",
+#                                 paste(sort(states),  collapse = "_"), 
+#                                 sep = "_"))
+
+# clean_file_name <- paste0("clean_lead_",save_file_name,".csv")
+
+# data <- read_csv(file.path(getwd(),clean_file_name),col_types=col_types)
+```
+
+```{r eval=FALSE}
+replica_sup_types <- readr::cols(company_na = readr::col_factor(), #Utility Company Name
+                      company_ty = readr::col_factor(), #Utility Company Type
+                      climate_zone = readr::col_factor(), #Climate Zone
+                      climate_zone_description = readr::col_factor(), #Climate Zone Description
+                      moisture_regime = readr::col_factor(), #Moisture Regime
+                      locale =  readr::col_factor(), #Locale
+                      lihtc_qualified =  readr::col_factor(NULL) #Low Income Tax Credit Qualification (T/F)
+                      )
+replica_sup <- get_replica_supplemental_dataset(col_types = replica_sup_types)
+replica_sup$merge_geo_id <- str_pad(as.character(replica_sup$geoid), width=11, side="left", pad="0")
+data <- left_join(data, replica_sup, by=c("merge_geo_id"))
+```
+
+
+```{r}
+# save data as csv
+write_csv(data, paste0("data/very_clean_",save_format,"_",base_file_name,".csv"))
+```
+
+
+

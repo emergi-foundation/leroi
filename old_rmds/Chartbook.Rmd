@@ -11,7 +11,7 @@ output:
 
 ```{r setup, include=FALSE}
 is_final=FALSE
-is_preview=TRUE
+is_preview=TRUE#
 is_draft=TRUE
 set.seed(123)
 
@@ -28,11 +28,11 @@ knitr::opts_chunk$set(comment='##',
                       tidy=TRUE,
                       cache=FALSE,
                       fig.margin=FALSE,
-                      fig.fullwidth = FALSE
+                      fig.fullwidth = TRUE
                       )
 ```
 
-```{r include=FALSE}
+```{r}
 library(tidyverse)
 library(knitr)
 library(kableExtra)
@@ -41,63 +41,240 @@ kable(knitr::opts_chunk$get() %>% enframe())
 
 
 ```{r}
-library(tidyverse)
-library(sf)
-library(MASS)
-library(scales)
-library(caret)
-library(spatstat)
-library(GGally)
-library(ggpubr)
-library(patchwork)
-library(mgcv)
-library(tidyselect)
-library(RColorBrewer)
-library(wesanderson)
-library(tigris)
-library(readxl)
-library(tidyverse)
+source("libraries.R")
 source("charts.R")
+source("ratios.R")
+source("lead_munging.R")
+```
+
+```{r params}
+states <- "all" #c("nc","sc","ca") #
 ```
 
 ```{r}
-groups_of_columns <- list(c("state_abbr")
+# load the data
+# clean_data <- st_read("very_clean_data_all.geojson")
+# clean_data <- geojson_sf("very_clean_data_all.geojson")
+clean_data <- read_csv(paste0("very_clean_data_",paste0(states,collapse = "_"),".csv"), guess_max = Inf)
+# census_tracts_shp <- st_read("census_tracts.geojson")
+# tract_shp <- st_sf(left_join(clean_data, census_tracts_shp, by=c("gisjoin")))
+
+```
+
+```{r}
+census_tracts_shp <- st_read("census_tracts.geojson")
+replica_sup <- get_replica_supplemental_dataset()
+tract_shp <- st_sf(left_join(census_tracts_shp, replica_sup, by=c("gisjoin")))
+
+# tract_shp <- st_sf(left_join(tract_shp, replica_sup, by=c("gisjoin")))
+```
+
+```{r eval=TRUE}
+
+
+energy_burden_poverty_line <- 0.10
+
+eroi_poverty_line <- eroi_func(g=1,
+                               s=energy_burden_poverty_line)
+
+# average_energy_cost <- weighted.mean(clean_data$energy_cost, 
+#                                      clean_data$total_kWh*clean_data$households, 
+#                                      na.rm = T)/weighted.mean(clean_data$total_kWh,
+#                                                               clean_data$households,
+#                                                               na.rm = T)
+# 
+# median_energy_cost <- weighted.median(clean_data$energy_cost, 
+#                                      clean_data$total_kWh*clean_data$households, 
+#                                      na.rm = T)/weighted.median(clean_data$total_kWh,
+#                                                               clean_data$households,
+#                                                               na.rm = T)
+# 12*(clean_data$electricity_spend + 
+#       clean_data$gas_spend + 
+#       clean_data$other_spend)
+# clean_data$total_kWh <- clean_data$gas_kWh + clean_data$electricity_kWh
+# median_electricity_cost <- weighted.median(clean_data$electricity_spend,
+#                               clean_data$electricity_kWh*clean_data$households, 
+#                                      na.rm = T)/weighted.median(clean_data$electricity_kWh,
+#                                                               clean_data$households,
+#                                                               na.rm = T)
+# 
+# median_gas_cost <- weighted.median(clean_data$gas_spend, 
+#                                      clean_data$gas_kWh*clean_data$households, 
+#                                      na.rm = 
+#                                     T)/weighted.median(clean_data$gas_kWh,
+#                                                               clean_data$households,
+#                                                               na.rm = T)
+# median_gas_cost_Mcf <- weighted.median(clean_data$gas_spend, 
+#                                      clean_data$gas_Mcf*clean_data$households, 
+#                                      na.rm = T)/weighted.median(clean_data$gas_Mcf,
+#                                                               clean_data$households,
+#                                                               na.rm = T)
+
+
+ner_poverty_line_dlrs <- ner_func(g=1,
+                                  s=energy_burden_poverty_line)
+
+# ner_poverty_line_mean <- ner_func(g=1,
+#                              s=energy_burden_poverty_line,
+#                              se=energy_burden_poverty_line/(average_energy_cost))
+# 
+# ner_poverty_line_median <- ner_func(g=1,
+#                              s=energy_burden_poverty_line,
+#                              se=median_energy_cost/energy_burden_poverty_line)
+
+ner_poverty_line <- ner_poverty_line_dlrs #ner_poverty_line_median
+
+
+dear_poverty_line <- dear_func(g=1,
+                               s=energy_burden_poverty_line)
+
+# ner_dear_poverty_line <- dear_func(g=1+median_energy_cost*ner_poverty_line_median,
+#                                s=1)
+
+
+```
+
+```{r}
+#chart_title <- "Household Economic Return on Energy Spending"
+chart_title <- "Community Net Energy Return"
+chart_subtitle <- "Net Earnings per Dollar of Energy Consumed"
+
+group_columns <- NULL#"income_bracket")#in_poverty
+                   #"primary_heating_fuel"
+
+metric_name <- "ner" #"energy_burden" #"ner" #"dear" #"eroi"
+metric_label <- "$/$"
+metric_cutoff_level <- ner_poverty_line
+metric_cutoff_label <- "Energy Poverty Line"
+
+upper_quantile_view <- 1.0 #0.999
+lower_quantile_view <- 0.0
+```
+
+```{r}
+graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
+
+top_metrics <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=upper_quantile_view, 
+                         lower_quantile_view=lower_quantile_view)
+# head(top_metrics)
+```
+
+
+```{r}
+#data$GEOID <- sub('.', '', data$gisjoin)
+group_variable <- "gisjoin"# "GEOID" #"state_abbr" #merge_geo_id" #
+group_columns <- c(group_variable) #c("gisjoin") #
+graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
+
+gwm <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.75, 
+                         lower_quantile_view=0.25)
+# head(gwm)
+```
+
+```{r}
+clean_top_metrics <- grouped_weighted_metrics(graph_data, 
+                         group_columns=NULL, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.75, 
+                         lower_quantile_view=0.25)
+# head(clean_top_metrics)
+```
+
+
+
+```{r}
+map_data <- left_join(tract_shp, gwm, by=c("gisjoin"))
+```
+
+
+```{r}
+# choropleth map
+choropleth_chart <- choropleth_map(
+    clean_data=map_data,
+    group_columns,
+    metric_name,
+    metric_label,
+    metric_cutoff_level,
+    metric_cutoff_label,
+    upper_quantile_view,
+    lower_quantile_view,
+    chart_title,
+    chart_subtitle,
+    graph_data,
+    weighted_metrics)
+choropleth_chart
+```
+
+
+```{r}
+short_list <- FALSE#TRUE
+groups_of_columns <- list(NULL,
+                          c("state_abbr"),
+                          c("housing_tenure","in_poverty")
                           )#,
 
 more_columns <- list(c("income_bracket"),
-                          c("occupancy_type"),
+                          c("housing_tenure"),
                           c("company_ty"),
                           c("company_na"),
                           # c("solar_primary_heating_fuel", "in_poverty"),
                           c("number_of_units"),
-                          c("number_of_units", "occupancy_type"),
-                          c("occupancy_type", "income_bracket"),
-                          c("number_of_units", "occupancy_type", "income_bracket"),
-                          c("year_constructed"),
+                          c("number_of_units", "housing_tenure"),
+                          c("housing_tenure", "income_bracket"),
+                          c("number_of_units", "housing_tenure", "income_bracket"),
+                          # c("year_constructed"),
                           c("in_poverty"),
-                          c("gisjoin"),
+                          # c("gisjoin"),
                           c("moisture_regime"),
                           c("locale"),
                           c("climate_zone_description"),
                           c("lihtc_qualified")
                           # c("primary_heating_fuel")
                           )
-if(is_preview==FALSE){groups_of_columns <- c(groups_of_columns, more_columns)}else{
-  groups_of_columns <- groups_of_columns[1]
-}
+if(short_list==FALSE){
+  groups_of_columns <- c(groups_of_columns, more_columns)
+  }
+# else{
+#   groups_of_columns <- groups_of_columns[1]
+# }
 
 group_columns <- groups_of_columns[[1]]
 
-names(groups_of_columns) <- paste0(groups_of_columns, collapse =  ", ")
+names(groups_of_columns) <- sapply(groups_of_columns, function(x){paste(x,collapse=" + ",sep="")})
 
 ```
 
 
+```{r eval=FALSE}
+x <- make_all_charts(clean_data=clean_data,
+                group_columns=c("lihtc_qualified"),
+                metric_name=metric_name, 
+                metric_label=metric_label, 
+                metric_cutoff_level=metric_cutoff_level,
+                metric_cutoff_label=metric_cutoff_label,
+                upper_quantile_view=upper_quantile_view,
+                lower_quantile_view=lower_quantile_view,
+                chart_title=chart_title,
+                chart_subtitle=chart_subtitle)
+# invisible(
+  lapply(x, print_func)
+  # )
+```
 
-```{r echo=FALSE, results="asis", fig.cap =  names(groups_of_columns)}
+
+```{r results="asis"}
 for(group_columns in groups_of_columns){
-  
-  # print("graph_1")
+  print(paste(group_columns, collapse = "+",sep=""))
+  cat('\n\n') 
   x <- make_all_charts(clean_data=clean_data,
                 group_columns=group_columns,
                 metric_name=metric_name, 
@@ -108,15 +285,25 @@ for(group_columns in groups_of_columns){
                 lower_quantile_view=lower_quantile_view,
                 chart_title=chart_title,
                 chart_subtitle=chart_subtitle)
-  print(x)
-  cat('\n\n') 
+  # for(chart in x){
+  #   print(chart)
+  #   cat('\n\n') 
+  # }
+  # invisible(
+    # lapply(x, print_func)
+    # )
+  # for(a_chart in x){
+  #   cat('## \n')
+  #   # frame()
+  #   print(a_chart)
+  #   plot.new()
+  #   # frame()
+  #   dev.off()
+  #   cat(' \n \n')
+  # }
   
-  graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
+  for (i in seq_along(x)) print(x[[i]])
   
-  y <- make_violin_plot()
-  
-  print(y)
-  cat('\n\n') 
   z <- calculate_weighted_metrics(graph_data=filter_graph_data(clean_data, 
                                                                group_columns, 
                                                                metric_name), 
@@ -140,6 +327,10 @@ for(group_columns in groups_of_columns){
 }
 ```
 
+
+```{r}
+# scatterplot for non-categorical variables
+```
 
 
 
@@ -172,7 +363,7 @@ ggplot(data=clean_data, aes(x=annual_income, y=mean_energy_cost, color=income_br
                 fullrange=TRUE)
 ```
 
-## Demographic Features Available
+## Demographic Features Available by Census Tract
 
 - company_na:                 Utility Company Name
 - company_ty:                 Utility Company Type

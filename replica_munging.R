@@ -90,7 +90,7 @@ get_replica_supplemental_dataset <- function(col_types=NULL){
                                supplemental_only=TRUE,
                                col_types=col_types)
   
-  replica$geoid <- as.character(replica$geoid)
+  replica$geoid <- str_pad(as.character(replica$geoid), width=11, side="left", pad="0")
   
   
   return(replica)
@@ -113,7 +113,7 @@ get_clean_replica <- function(replica=get_replica_dataset(),
                               "mid", 
                               "high")
   replica_units <- c("sf","mf")
-  replica_occupancy_type <- c("rent","own")
+  replica_housing_tenure <- c("rent","own")
   variables <- c("hh", # household count
                  "elep_hh", # Average Household Electricity Expenditures ($/month)
                  "mwh", # annual generation
@@ -124,7 +124,7 @@ get_clean_replica <- function(replica=get_replica_dataset(),
   
   spec <-  expand_grid(replica_income_bracket = replica_income_bracket, 
                        replica_units = replica_units, 
-                       replica_occupancy_type = replica_occupancy_type, 
+                       replica_housing_tenure = replica_housing_tenure, 
                        .value = variables)
   spec$.name <- do.call(paste, c(spec, sep="_"))
   
@@ -167,7 +167,7 @@ replica_to_lead <- function(replica=get_clean_replica()){
   group_columns <- c("geoid", 
                      "merge_income_bracket", 
                      "replica_units", 
-                     "replica_occupancy_type" ) #""
+                     "replica_housing_tenure" ) #""
   
   
   replica <- replica %>%
@@ -179,7 +179,7 @@ replica_to_lead <- function(replica=get_clean_replica()){
               replica_suitable_buildings = sum(bldg_cnt),
               replica_suitable_planes = sum(devp_cnt),
               replica_suitable_area_m2 = sum(devp_m2),
-              replica_mw = sum(mw))
+              replica_mw = sum(mw)) %>% ungroup()
   
   return(replica)
 }
@@ -191,8 +191,8 @@ lead_to_replica <- function(clean_lead=NULL){
     clean_lead <- NULL
   }
   # print(object.size(clean_lead, units="Gb"))
-  print("consolidating occupancy_type")
-  clean_lead$replica_occupancy_type <- dplyr::recode_factor(clean_lead$occupancy_type, 
+  print("consolidating housing_tenure")
+  clean_lead$replica_housing_tenure <- dplyr::recode_factor(clean_lead$housing_tenure, 
                                                      `OWNER` = "own", 
                                                      `RENTER` = "rent")#,
   # .default = "D", 
@@ -205,7 +205,7 @@ lead_to_replica <- function(clean_lead=NULL){
                                                    `80-100%` = "mid_high", 
                                                    `100%+` = "mid_high")
   print("consolidating min_units")
-  clean_lead$replica_units <- ifelse(clean_lead$min_units > 1, "mf", "sf")
+  clean_lead$replica_units <- as.factor(ifelse(clean_lead$min_units > 1, "mf", "sf"))
   # seem to be getting a lot of NAs in clean_lead$min_units, likely from "other". Like...13% of homes in NC are NA. Should reconcile...
   
   
@@ -215,20 +215,21 @@ lead_to_replica <- function(clean_lead=NULL){
   group_columns <- c("geo_id", 
                      "merge_income_bracket", 
                      "replica_units", 
-                     "replica_occupancy_type" ) #""
+                     "replica_housing_tenure" ) #""
   # print(object.size(clean_lead, units="Gb"))
   
   clean_lead <- clean_lead %>%
     group_by_at(., .vars=vars(all_of(group_columns))) %>% 
-    mutate(group_households = sum(households)) %>% 
-    summarise(lead_households = sum(households),
-              lead_annual_income = sum(annual_income * group_households)/sum(group_households),
-              lead_mean_energy_cost = sum(mean_energy_cost * group_households)/sum(group_households),
-              lead_electricity_spend = sum(electricity_spend * group_households)/sum(group_households),
-              lead_gas_spend = sum(gas_spend * group_households)/sum(group_households),
-              lead_other_spend = sum(other_spend * group_households)/sum(group_households), 
-              lead_average_min_age = sum(min_age * group_households)/sum(group_households),
-              lead_pct_detached = sum(as.numeric(detached) * group_households)/sum(group_households))#
+    mutate(group_households = sum(as.numeric(households), na.rm = T)) %>% 
+    summarise(lead_households = sum(as.numeric(households), na.rm = T),
+              lead_income = sum(as.numeric(income) * group_households, na.rm = T)/sum(group_households, na.rm = T),
+              # lead_mean_energy_cost = sum(mean_energy_cost * group_households)/sum(group_households),
+              lead_electricity_spend = sum(as.numeric(electricity_spend) * group_households, na.rm = T)/sum(group_households, na.rm = T),
+              lead_gas_spend = sum(as.numeric(gas_spend) * group_households, na.rm = T)/sum(group_households, na.rm = T),
+              lead_other_spend = sum(as.numeric(other_spend) * group_households, na.rm = T)/sum(group_households, na.rm = T), 
+              # lead_average_min_age = sum(min_age * group_households)/sum(group_households),
+              lead_pct_detached = sum(as.numeric(detached) * group_households, na.rm = T)/sum(group_households, na.rm = T)) %>% 
+    ungroup()
               # primary fuel type
   # print(object.size(clean_lead, units="Gb"))
   # aggregate

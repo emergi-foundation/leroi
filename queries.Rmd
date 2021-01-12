@@ -1,0 +1,131 @@
+---
+title: "Queries"
+author: "Eric Scheier"
+date: "1/5/2021"
+output: html_document
+---
+
+```{r sources}
+source("libraries.R")
+source("ratios.R")
+source("charts.R")
+source("lead_munging.R")
+```
+
+```{r parameters}
+states <- "all" #c("ca","nc","sc") #
+# replica_sup <- get_replica_supplemental_dataset()
+# states <- c("ca", "nc","sc") # c("nc","ca") #  "nc" #"all" #
+# income_metric <- "ami68" #"fpl15" #
+# geographic_scope <- "tract" #statecitycounty
+# format <- "replica" # "lead" #
+# refresh <- FALSE
+
+income_metric <- "AMI" #"AMI" #"fpl15" #
+geographic_scope <- "Census Tracts" #statecitycounty
+refresh <- FALSE
+acs_version <- 2018
+load_format <- "very_clean" #replica #lead #raw
+save_ext <- "csv"#"fst",#
+save_format <- "very_clean" #"replica"
+
+version_text <- as.character(acs_version)
+if(acs_version==2016){
+  version_text <- "sh"
+}
+
+base_file_name <- tolower(paste(income_metric,
+                                geographic_scope,
+                                version_text,
+                                paste(states,collapse="_",sep=""), sep = "_"))
+# paste0("data/clean_lead_",base_file_name,".",save_ext)
+```
+
+
+```{r load_data}
+clean_data_ami <- read_csv(paste0("data/very_clean_data_",base_file_name,".csv"), guess_max = Inf)
+
+income_metric <- "FPL"
+base_file_name <- tolower(paste(income_metric,
+                                geographic_scope,
+                                version_text,
+                                paste(states,collapse="_",sep=""), sep = "_"))
+clean_data_fpl <- read_csv(paste0("data/very_clean_data_",base_file_name,".csv"), guess_max = Inf)
+
+census_tracts_shp <- st_read("data/census_tracts.geojson")
+replica_sup <- get_replica_supplemental_dataset()
+tract_shp <- st_sf(left_join(census_tracts_shp, replica_sup, by=c("gisjoin")))
+```
+
+```{r chart_params}
+#chart_title <- "Household Economic Return on Energy Spending"
+#chart_title <- "Community Net Energy Return"
+#chart_subtitle <- "Net Earnings per Dollar of Energy Consumed"
+
+group_columns <- NULL #"income_bracket")#in_poverty
+                   #"primary_heating_fuel"
+
+metric_name <- "electricity_spend" #"energy_burden" #"ner" #"dear" #"eroi"
+metric_label <- "$"
+metric_cutoff_level <- 0 #ner_poverty_line
+metric_cutoff_label <- "$0"
+
+upper_quantile_view <- 1.0
+lower_quantile_view <- 0.0
+```
+
+```{r grouped_weighted_metrics}
+#data$GEOID <- sub('.', '', data$gisjoin)
+group_variable <- "geoid"# "GEOID" #"state_abbr" #merge_geo_id" #
+group_columns <- c(group_variable) #c("gisjoin") #
+graph_data <- filter_graph_data(clean_data_ami, group_columns, metric_name)
+
+gwm <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.75, 
+                         lower_quantile_view=0.25)
+# head(gwm)
+```
+
+```{r continental}
+# remove HI and AK
+# continental_shp <- tract_shp %>% filter(!(state_abbr %in% c("HI","AK", NA)))
+# add utility cutout
+utility_shp <- tract_shp %>% filter(company_na %in% c("Duke Energy Progress","Duke Energy Carolinas") & state_abbr %in% c("NC"))
+
+map_data <- left_join(utility_shp, gwm, by=c("geoid"))
+
+clean_top_metrics <- grouped_weighted_metrics(graph_data %>% 
+                                                filter(!(state_abbr %in% c("HI","AK", NA))), 
+                         group_columns=NULL, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=.995, 
+                         lower_quantile_view=0.005)
+# head(clean_top_metrics)
+
+```
+
+```{r continental_map, out.width="100%", fig.cap="Map of the median net earned income per secondary energy expenditure for each census tract in the continental United States."}
+# figure_name <- "choropleth_map"
+# figure_file <- paste0("figures/",figure_name,".png")
+# if(!file.exists(figure_file) || refresh){
+choropleth_chart <- choropleth_map(
+    clean_data=map_data,
+    group_columns,
+    metric_name,
+    metric_label,
+    metric_cutoff_level,
+    metric_cutoff_label,
+    upper_quantile_view,
+    lower_quantile_view,
+    chart_title,
+    chart_subtitle,
+    weighted_metrics=clean_top_metrics)
+  # ggsave(figure_file, plot=choropleth_chart)
+# }
+choropleth_chart
+```
+

@@ -8,6 +8,7 @@ library(data.table)
 library(tidyverse)
 library(arrow)
 library(feather)
+library(fst)
 
 source("replica_munging.R")
 
@@ -36,16 +37,37 @@ list_all_states <- function(all_resources=NULL, refresh=FALSE){
   return(states)
 }
 
+download_new_lead_folders <- function(refresh=TRUE, states="all"){
+  
+  if(states=="all"){
+    states <- list_all_states()
+  }
+  
+  for(state in states){
+    state <- toupper(state)
+    # https://data.openei.org/files/573/AK-2018-LEAD-data.zip
+    url_name <- paste0(state,"-2018-LEAD-data")
+    if(state %in% c("AZ")){
+      url_name <- paste0(url_name," (1)")
+    }
+    filename <- paste0("https://data.openei.org/files/573/",url_name,".zip")
+    temp <- tempfile()
+    download.file(filename,temp)
+    unzip(zipfile=temp,exdir="data")
+    unlink(temp)
+  }
+}
+
 download_lead_resource_ids <- function(replace=TRUE){
-  if(!file.exists("LEAD_resource_ids.csv")){
+  if(!file.exists("data/LEAD_resource_ids.csv")){
     package_id="9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b"
     full_package <- package_show(id=package_id,
                                  url = "https://openei.org/doe-opendata/",
                                  as="list")
     all_resources <- full_package$resources %>% map(flatten) %>% bind_rows()
-    write_csv(all_resources, "LEAD_resource_ids.csv")
+    write_csv(all_resources, "data/LEAD_resource_ids.csv")
   }else{
-    all_resources <- read_csv("LEAD_resource_ids.csv")
+    all_resources <- read_csv("data/LEAD_resource_ids.csv", guess_max = Inf)
   }
   return(all_resources)
 }
@@ -64,52 +86,82 @@ get_lead_resource_url <- function(file_name,
 }
 
 get_lead_dataset <- function(state,
-                             income_metric="fpl15",
+                             income_metric="fpl15", #AMI FPL SMI
                              resource_id=NULL,
-                             geographic_scope="tract",
+                             geographic_scope="tract",#"Census Tracts","State, Counties, Cities"
                              all_resources=NULL,
                              refresh=FALSE,
                              load=TRUE,
-                             format="lead",
-                             save_format="fst"){ #csv
+                             save_format="lead",
+                             load_format=NULL,
+                             save_ext="csv",
+                             save=TRUE,
+                             acs_version=2018#"2016",
+                             ){
   
-  print(state)
-  acs_date <- 2016
-  youngest_building <- acs_date - 1
-  oldest_building <- 1900 # this assumption is not used in the ultimate analysis
-  max_units <- 500 # 1 NYC block is 5 acres, assume 100 units/acre # this assumption is not used in the ultimate analysis
-  
-  
-  save_file_name <- toupper(paste(income_metric,
-                                  geographic_scope,
-                                  "sh",
-                                  state, sep = "_"))#"AMI68_TRACT_SH_NC"
-  load_file_name <- paste0("clean_lead_",save_file_name,".",save_format)
-  if (format=="replica"){
-    load_file_name <- paste0("replica_lead_",save_file_name,".",save_format)
+  if(is.null(all_resources)){
+    all_resources <- download_lead_resource_ids(replace=refresh)
   }
   
-  if(!file.exists(load_file_name) | refresh==TRUE){
-    resource_url <- get_lead_resource_url(file_name=save_file_name, 
-                                          all_resources=all_resources)
-    
-    
-    # save_file_name <- paste0(income_metric,
-    #                          geographic_scope,
-    #                          state)
-    
-    desired_name <- paste0(save_file_name,".",save_format)
-    desired_path <- file.path(desired_name)
-    
-    if (!file.exists(desired_path)){
-      download.file(resource_url,desired_path, method="libcurl")
+  print(state)
+  
+  version_text <- as.character(acs_version)
+  if(acs_version==2016){
+    version_text <- "sh"
+  }
+  
+  base_file_name <- toupper(paste(income_metric,
+                                  geographic_scope,
+                                  version_text,
+                                  state, sep = "_"))#"AMI68_TRACT_SH_NC"
+  
+  raw_path <- paste0("data/",base_file_name,".",save_ext)
+  if(acs_version==2018){
+    raw_path <- paste0("data/",paste(toupper(state),
+                                           income_metric,
+                                           geographic_scope,
+                                           version_text,sep=" "),".",save_ext)
+  }
+  
+  base_file_names <- list(replica=paste0("data/replica_lead_",base_file_name,".",save_ext),
+                          raw=raw_path, 
+                          lead=paste0("data/clean_lead_",base_file_name,".",save_ext),
+                          # clean=clean_data <- paste0("data/clean_",?,"_",base_file_name,".csv"),
+                          very_clean=clean_data <- paste0("data/very_clean_data_",base_file_name,".csv"))
+  
+  if(is.null(load_format)){
+    load_format <- "raw"
+  }
+  
+  load_file_name <- base_file_names[[load_format]]
+  save_file_name <- base_file_names[[save_format]]
+  
+  print(paste0("Looking for file in case we have it: ",save_file_name))
+  if(!file.exists(save_file_name) | refresh==TRUE){
+    print(paste0("We do not have it. Looking for ",load_file_name," to create it from"))
+    if(acs_version==2016){
+      desired_name <- paste0(base_file_name,".",save_ext)
+      print(desired_name)
+      resource_url <- get_lead_resource_url(file_name=base_file_name, 
+                                            all_resources=all_resources)
+      
+      desired_path <- file.path("data",desired_name)
+      
+      if (!file.exists(desired_path)){
+        print(resource_url)
+        download.file(resource_url,desired_path, method="libcurl")
+      }
     }
-    if (format=="raw"){
+    if(acs_version==2018){
+      download_new_lead_folders(refresh=refresh, states=c(state))
+      desired_path <- load_file_name
+    }
+    if (save_format=="raw"){
       if (load) {
-        if (save_format=="csv"){
-          lead_raw <- read_csv(desired_path)
+        if (save_ext=="csv"){
+          lead_raw <- read_csv(desired_path, guess_max = Inf)
         }
-        if (save_format=="feather"){
+        if (save_ext=="feather"){
           lead_raw <- read_feather(desired_path)
         }
         return(lead_raw)
@@ -117,17 +169,167 @@ get_lead_dataset <- function(state,
       return(TRUE)
     }
     
-    # https://readxl.tidyverse.org/articles/articles/readxl-workflows.html
     
-    read_then_csv <- function(sheet, path) {
-      pathbase <- path %>%
-        basename() %>%
-        tools::file_path_sans_ext()
-      path %>%
-        read_excel(sheet = sheet, col_names = FALSE, col_types = "text") %>% 
-        write_csv(paste0(sheet, ".csv"))
+    #burden_dict
+    if(save_ext=="csv"){
+      data <- read_csv(desired_path, guess_max = Inf)
+    }
+    if(save_ext=="fst"){
+      print(desired_path)
+      # data <- read_feather(desired_path)
+      data <- read_fst(desired_path)
+    }
+                     # col_types=cols(
+                     #   geo_id = readr::col_character()))#,
+                     #   state_id = readr::col_character(),
+                     #   county_id = readr::col_character(),
+                     #   tract_id = readr::col_character(),
+                     #   puma10_code = readr::col_character(),
+                     #   fmr_code = readr::col_character(),
+                     #   housing_tenure = readr::col_factor(),
+                     #   income_bracket = readr::col_factor(),
+                     #   primary_heating_fuel = readr::col_factor(),
+                     #   building_type = readr::col_factor(),
+                     #   year_constructed = readr::col_factor(),
+                     #   households = col_double(),
+                     #   annual_income = col_double(),
+                     #   electricity_spend = col_double(),
+                     #   gas_spend = col_double(),
+                     #   other_spend = col_double(),
+                     #   acs_responses = col_double(),
+                     #   min_age = col_double(),
+                     #   min_units = col_double(),
+                     #   detached = readr::col_factor(),
+                     #   mean_energy_cost = col_double()
+                     # ))
+    
+    #summary(data)
+    
+    #Seperate the `AMI68` column into `housing_tenure` and `income_bracket` columns
+    # print(object.size(data, units="Gb"))
+    
+    # print(object.size(data, units="Gb"))
+    #data <- add_acs_data(data, save_file_name)
+    
+    #summary(data)
+    #str(data)
+    print(paste0("converting ",state," to format: ",save_format))
+    if(save_format=="lead"){
+      data <- raw_to_lead(data, acs_version=acs_version)
+    }
+    if (save_format=="replica"){
+      if(load_format=="raw"){
+        data <- raw_to_lead(data, acs_version = acs_version)
+      }
+      data <- lead_to_replica(data)
+    }
+    if(save_format=="in_poverty"){
+      if(load_format=="raw"){
+        data <- raw_to_lead(data, acs_version=acs_version)
+      }
+      if(load_format=="replica"){
+        data <- replica_to_lead(data)
+      }
+      data <- lead_to_poverty(data, acs_version=acs_version, income_metric=income_metric)
+    }
+    if(save_format=="very_clean"){
+      print(NULL)
+      # data <- very_clean_lead(data)
     }
     
+    if(save){
+      if(save_ext=="csv"){
+        fwrite(data, file=save_file_name)
+        # write_csv(data, load_file_name)
+      }
+      if(save_ext=="fst"){
+        # write_feather(data, load_file_name)
+        write_fst(data, save_file_name, uniform_encoding=FALSE)
+      }
+    }
+  }
+  else{
+    if(load){
+      if(save_ext=="csv"){
+        data <- read_csv(save_file_name, guess_max = Inf)
+      }
+      if(save_ext=="fst"){
+        # data <- read_feather(load_file_name)
+        data <- read_fst(save_file_name)
+      }
+    }
+  }
+  # print(object.size(data , units="Gb"))
+  return(if(load){data}else{load_file_name})
+}
+
+read_then_csv <- function(sheet, path) {
+  pathbase <- path %>%
+    basename() %>%
+    tools::file_path_sans_ext()
+  path %>%
+    read_excel(sheet = sheet, col_names = FALSE, col_types = "text") %>% 
+    write_csv(paste0(sheet, ".csv"))
+}
+
+raw_to_lead <- function(data, acs_version){
+  print(paste0("converting raw to lead for acs_version ",as.character(acs_version)))
+  if(acs_version==2018){
+    
+    
+    # determine detached or not
+    # data$detached <- ? from existing logic?
+    # min_units? or can go from detached for mf vs sf distinction. Check the documentation
+    print(names(data))
+    bld_types <- unique(data$BLD)
+    bld_ranges <- str_extract_all(bld_types, "[0-9]+", simplify=TRUE)
+    print(bld_types)
+    print(bld_ranges)
+    
+    bld_ranges <- apply(bld_ranges, c(1,2), as.numeric)
+    
+    bld_ranges <- data.frame(bld_ranges)
+    names(bld_ranges) <- c("min_units", "max_units")
+    bld_ranges$BLD <- bld_types
+    
+    bld_ranges$detached <- str_detect(bld_ranges$BLD, "DETACHED")*1.0
+    
+    data <- merge(data, bld_ranges[c("BLD",
+                                   "min_units",
+                                   "detached")], 
+                  by = "BLD", 
+                  all.x = TRUE)
+    
+    possible_colnames <- c("AMI68","FPL15","SMI")
+    income_bracket_colname <- names(data)[str_detect(names(data),paste(possible_colnames,collapse="|"))]
+    
+    data$FIP <- str_pad(as.character(data$FIP), width=11, side="left", pad="0")
+    
+    data <- dplyr::select(data,
+                          geo_id=`FIP`,
+                          state_abbr=`ABV`,
+                          housing_tenure=`TEN`,
+                          year_constructed=`YBL6`,
+                          building_type=`BLD`,
+                          min_units,
+                          detached,
+                          primary_heating_fuel=`HFL`,
+                          income_bracket=!!(income_bracket_colname),
+                          households=`UNITS`,
+                          income=`HINCP`,
+                          electricity_spend=`ELEP`,
+                          gas_spend=`GASP`,
+                          other_spend=`FULP`)
+    
+    print(TRUE)
+  }
+  if(acs_version==2016){
+    acs_date <- as.integer(acs_version)
+    youngest_building <- acs_date - 1
+    oldest_building <- 1900 # this assumption is not used in the ultimate analysis
+    max_units <- 500 # 1 NYC block is 5 acres, assume 100 units/acre # this assumption is not used in the ultimate analysis
+    # https://readxl.tidyverse.org/articles/articles/readxl-workflows.html
+
     url <- "https://openei.org/doe-opendata/dataset/9dcd443b-c0e5-4d4a-b764-5a8ff0c2c92b/resource/51a2cd49-fd61-4842-82e2-2f90ffec7e42/download/datadictionary.xlsx"
     
     if(!file.exists("Data Dictionary.csv")){
@@ -141,7 +343,7 @@ get_lead_dataset <- function(state,
         map(read_then_csv, path = path)
     }
     
-    data_dict <- read_csv("Data Dictionary.csv")
+    data_dict <- read_csv("Data Dictionary.csv", guess_max = Inf)
     
     ybl_dict <- data_dict[1:7,1:2]
     ybl_dict[1,2] <- data_dict[1,3]
@@ -164,55 +366,18 @@ get_lead_dataset <- function(state,
                          names(hfl_dict), 
                          names(bld_dict), 
                          names(ybl_dict))
-    #burden_dict
-    if(save_format=="csv"){
-      data <- read_csv(desired_path)
-    }
-    if(save_format=="fst"){
-      print(desired_path)
-      # data <- read_feather(desired_path)
-      data <- read_fst(desired_path)
-    }
-    #, 
-                     # col_types=cols(
-                     #   geo_id = readr::col_character()))#,
-                     #   state_id = readr::col_character(),
-                     #   county_id = readr::col_character(),
-                     #   tract_id = readr::col_character(),
-                     #   puma10_code = readr::col_character(),
-                     #   fmr_code = readr::col_character(),
-                     #   occupancy_type = readr::col_factor(),
-                     #   income_bracket = readr::col_factor(),
-                     #   primary_heating_fuel = readr::col_factor(),
-                     #   number_of_units = readr::col_factor(),
-                     #   year_constructed = readr::col_factor(),
-                     #   households = col_double(),
-                     #   annual_income = col_double(),
-                     #   electricity_spend = col_double(),
-                     #   gas_spend = col_double(),
-                     #   other_spend = col_double(),
-                     #   acs_responses = col_double(),
-                     #   min_age = col_double(),
-                     #   min_units = col_double(),
-                     #   detached = readr::col_factor(),
-                     #   mean_energy_cost = col_double()
-                     # ))
-    
-    #summary(data)
-    
-    #Seperate the `AMI68` column into `occupancy_type` and `income_bracket` columns
-    # print(object.size(data, units="Gb"))
-    
+    print(names(data))
+    # print(unique(data$))
     data <- data %>% 
-      separate(col=toupper(income_metric),
-               into=c("occupancy_type", "income_bracket"), 
+      separate(col=toupper(income_metric), 
+               into=c("tenure", "income_bracket"), 
                sep = " ", 
                remove = FALSE, 
-               convert = FALSE,
+               convert = FALSE, 
                extra = "warn", 
                fill = "warn")
     
-    data$occupancy_type <- as.factor(data$occupancy_type)
+    data$tenure <- as.factor(data$tenure)
     data$income_bracket <- as.factor(data$income_bracket)
     
     ybl_dict
@@ -262,15 +427,15 @@ get_lead_dataset <- function(state,
     bld_dict$`BLD INDEX` <- as.factor(bld_dict$`BLD INDEX`)
     
     bld_dict <- rename(bld_dict,
-                       number_of_units=`Number of units in the building`)
+                       building_type=`Number of units in the building`)
     
-    bld_dict$number_of_units <- as.factor(bld_dict$number_of_units)
+    bld_dict$building_type <- as.factor(bld_dict$building_type)
     
     data$`BLD INDEX` <- as.factor(data$`BLD INDEX`)
     data <- merge(data, bld_dict[c("BLD INDEX",
                                    "min_units",
                                    "detached",
-                                   "number_of_units")], 
+                                   "building_type")], 
                   by = "BLD INDEX", 
                   all.x = TRUE)
     
@@ -285,27 +450,26 @@ get_lead_dataset <- function(state,
     
     # Create the Energy Expenditures Indicator `mean_energy_cost`.
     
-    data$mean_energy_cost <- data$`ELEP CAL` + data$`GASP CAL` + data$FULP
+    # data$mean_energy_cost <- data$`ELEP CAL` + data$`GASP CAL` + data$FULP
     
     data <- dplyr::select(data,
-                   `GEO ID`,
-                   `PUMA10`,
-                   `FMR`,
-                   `occupancy_type`,
-                   `income_bracket`,
-                   `primary_heating_fuel`,
-                   `number_of_units`,
-                   `year_constructed`,
-                   `UNITS`, 
-                   `HINCP`, 
-                   `ELEP CAL`, 
-                   `GASP CAL`, 
-                   `FULP`, 
-                   `COUNT`, 
-                   `min_age`, 
-                   `min_units`, 
-                   `detached`,
-                   `mean_energy_cost`)
+                          `GEO ID`,
+                          `PUMA10`,
+                          `FMR`,
+                          `housing_tenure`,
+                          `income_bracket`,
+                          `primary_heating_fuel`,
+                          `building_type`,
+                          `year_constructed`,
+                          `UNITS`, 
+                          `HINCP`, 
+                          `ELEP CAL`, 
+                          `GASP CAL`, 
+                          `FULP`, 
+                          `COUNT`, 
+                          `min_age`, 
+                          `min_units`, 
+                          `detached`)
     
     data <- rename(data,
                    geo_id=`GEO ID`,
@@ -321,60 +485,33 @@ get_lead_dataset <- function(state,
              geo_id=as.character(geo_id),
              fmr_code=as.character(fmr_code))
     
-    data <- separate(data,
-                     col=geo_id,
-                     into=c("state_id","county_id","tract_id"),
-                     sep=c(2,5), 
-                     remove=FALSE, 
-                     convert=FALSE)
-    
-    fp <- read_excel(path="all-geocodes-v2016.xlsx", skip=5,
-                     col_names=c("summary_level","state_code_fips","county_code_fips",
-                                 "county_sub_code","place_code","city_code",
-                                 "area_name"))
-    
-    state_names <- read_delim(file = "state_fips.txt", delim = "|",
-                              col_names=c("state_code_fips","state_code_usps","state_name","state_code_gnisid"))
-    
-    
-    data$state_id <- str_pad(as.character(data$state_id), width=2, side="left", pad="0")
-    data$county_id <- str_pad(as.character(data$county_id), width=3, side="left", pad="0")
-    
-    data <- left_join(x=data, y=state_names, 
-                      by=c("state_id"="state_code_fips"))
-    
-    data <- left_join(x=data, y=fp, 
-                      by=c("state_id"="state_code_fips","county_id"="county_code_fips"))
-    
-    # print(object.size(data, units="Gb"))
-    #data <- add_acs_data(data, save_file_name)
-    
-    #summary(data)
-    #str(data)
-    print(paste0("converting ",state," to format: ",format))
-    if (format=="replica"){
-      data <- lead_to_replica(data)
-    }
-    if(save_format=="csv"){
-      write_csv(data, load_file_name)
-    }
-    if(save_format=="fst"){
-      # write_feather(data, load_file_name)
-      write_fst(data, load_file_name, uniform_encoding=FALSE)
-    }
-  }else{
-    if(load){
-      if(save_format=="csv"){
-        data <- read_csv(load_file_name)
-      }
-      if(save_format=="fst"){
-        # data <- read_feather(load_file_name)
-        data <- read_fst(load_file_name)
-      }
-    }
+    # data <- separate(data,
+    #                  col=geo_id,
+    #                  into=c("state_id","county_id","tract_id"),
+    #                  sep=c(2,5), 
+    #                  remove=FALSE, 
+    #                  convert=FALSE)
+    # 
+    # fp <- read_excel(path="all-geocodes-v2016.xlsx", skip=5,
+    #                  col_names=c("summary_level","state_code_fips","county_code_fips",
+    #                              "county_sub_code","place_code","city_code",
+    #                              "area_name"))
+    # 
+    # state_names <- read_delim(file = "state_fips.txt", delim = "|",
+    #                           col_names=c("state_code_fips","state_code_usps","state_name","state_code_gnisid"))
+    # 
+    # 
+    # data$state_id <- str_pad(as.character(data$state_id), width=2, side="left", pad="0")
+    # data$county_id <- str_pad(as.character(data$county_id), width=3, side="left", pad="0")
+    # 
+    # data <- left_join(x=data, y=state_names, 
+    #                   by=c("state_id"="state_code_fips"))
+    # 
+    # data <- left_join(x=data, y=fp, 
+    #                   by=c("state_id"="state_code_fips","county_id"="county_code_fips"))
+    print(TRUE)
   }
-  # print(object.size(data , units="Gb"))
-  return(if(load){data}else{load_file_name})
+  return(data)
 }
 
 clean_lead_data <- function(data, save_file_name){
@@ -441,22 +578,29 @@ add_acs_data <- function(data, save_file_name){
 }
 
 get_multiple_states <- function(states="all",
-                                income_metric="ami68",
-                                geographic_scope="tract",
+                                income_metric="ami68", #AMI FPL SMI
+                                geographic_scope="tract", #tract state county city zip
+                                acs_version=2018,#2016
                                 refresh=FALSE,
                                 col_types=NULL,
-                                format="lead",
-                                save_format="fst",#csv
-                                parallel=TRUE){
+                                save_format="lead", # replica raw new_lead
+                                save_ext="csv",#"fst",
+                                load_format=NULL, 
+                                parallel=TRUE,
+                                load=TRUE){
+  acs_text <- as.character(acs_version)
+  if(acs_version==2016){
+    acs_text <- "sh"
+  }
   
-  save_file_name <- toupper(paste(income_metric,
+  base_file_name <- toupper(paste(income_metric,
                                   geographic_scope,
-                                  "sh",
+                                  acs_text,
                                   paste(sort(states),  collapse = "_"), 
                                   sep = "_"))#"AMI68_TRACT_SH_NC"
   
   all_resources <- download_lead_resource_ids(replace=refresh)
-  
+  orig_states <- states
   if(tolower(states=="all")){
     states <- list_all_states((all_resources=all_resources))
   }
@@ -464,50 +608,98 @@ get_multiple_states <- function(states="all",
   states <- c(states)
   print(states)
   
-  load_file_name <- paste0("clean_lead_",save_file_name,".",save_format)
-  if (format=="replica"){
-      load_file_name <- paste0("replica_lead_",save_file_name,".",save_format)
-    }
-  if(format=="raw"){
-    load_file_name <- paste0(save_file_name,".",save_format)
+  # raw_path <- paste0("data/",base_file_name,".",save_ext)
+  # if(acs_version==2018){
+  #   raw_path <- paste0("data/",paste(toupper(state),
+  #                                    income_metric,
+  #                                    geographic_scope,
+  #                                    version_text,sep=" "),".",save_ext)
+  # }
+  
+  base_file_names <- list(replica=paste0("data/replica_lead_",base_file_name,".",save_ext),
+                          raw=paste0("data/",base_file_name,".",save_ext),
+                          lead=paste0("data/clean_lead_",base_file_name,".",save_ext),
+                          in_poverty=clean_data <- paste0("data/in_poverty_data_",base_file_name,".csv"),
+                          very_clean=clean_data <- paste0("data/very_clean_data_",base_file_name,".csv"))
+  
+  if(is.null(load_format)){
+    load_format <- "raw"
   }
   
-  if(!file.exists(load_file_name) | refresh==TRUE){
-  
-    for (state in states){
-      get_lead_dataset(state, 
-                       income_metric=income_metric, 
-                       resource_id=NULL, 
-                       geographic_scope=geographic_scope, 
-                       all_resources=all_resources,
-                       refresh=refresh,
-                       load=FALSE,
-                       format=format,
-                       save_format=save_format)
-      gc()
-    }
-    
-    #data <- bind_rows(all_states)
-    p_load(doParallel,data.table,dplyr,stringr,fst)
-    
-    # get the file name
-    #dir() %>% str_subset("\\.csv$") -> fn
+  load_file_name <- base_file_names[[load_format]]
+  save_file_name <- base_file_names[[save_format]]
+  already_have <- NULL
+  deep_refresh <- refresh
+  if(!(refresh==TRUE)){
+    print(paste0("Looking for file in case we already have it: ",save_file_name))
+    if(!file.exists(save_file_name)){
+      # refresh <- TRUE
+      print(paste0("We do not have it. Looking for ",load_file_name," to create it from"))
+      if(!file.exists(load_file_name)){
+        refresh <- TRUE
+        print(paste0("We do not have a base file. Loading the subcomponents now."))
+        for (state in states){
+          print(paste0("checking on state: ",state))
+          get_lead_dataset(state, 
+                           income_metric=income_metric, 
+                           resource_id=NULL, 
+                           geographic_scope=geographic_scope, 
+                           acs_version=acs_version, 
+                           all_resources=all_resources,
+                           refresh=deep_refresh,
+                           load=FALSE,
+                           load_format=NULL,
+                           save_format=load_format,
+                           save_ext=save_ext)
+        }
+      }else{
+        print("We do already have the necessary load file")
+        if(save_ext=="csv"){
+          data <- read_csv(load_file_name, guess_max = Inf)
+        }
+        if(save_ext=="feather"){
+          data <- read_feather(load_file_name)
+        }
+        }
+    }else{
+      print("We do already have the requested file saved")
+      
+      if(save_ext=="csv"){
+        data <- read_csv(save_file_name, guess_max = Inf)
+      }
+      if(save_ext=="feather"){
+        data <- read_feather(save_file_name)
+      }
+      already_have <- TRUE
+      }
+  }
+  if(refresh==TRUE){
+    print("refreshing data")
     filenames <- sapply(states, function(x){
-      save_file_name <- toupper(paste(income_metric,
-                                      geographic_scope,
-                                      "sh",
-                                      x,
-                                      sep = "_"))
-      load_file_name <- paste0("clean_lead_",save_file_name,".",save_format)
-      if(format=="replica"){
-        load_file_name <- paste0("replica_lead_",save_file_name,".",save_format)
+      print(x)
+      temp_save_file_name <- toupper(paste(income_metric,
+                                           geographic_scope,
+                                           acs_text,
+                                           x,
+                                           sep = "_"))
+      
+      temp_load_file_name <- paste0("clean_lead_",temp_save_file_name,".",save_ext)
+      if(load_format=="replica"){
+        temp_load_file_name <- paste0("replica_lead_",temp_save_file_name,".",save_ext)
       }
-      if(format=="raw"){
-        load_file_name <- paste0(save_file_name,".",save_format)
+      if(load_format=="raw"){
+        temp_load_file_name <- paste0(temp_save_file_name,".",save_ext)
+        if(acs_version==2018){
+          # SC AMI State, Counties, Cities 2018.csv
+          temp_load_file_name <- paste0(paste(toupper(x),
+                                              toupper(income_metric),
+                                              geographic_scope,
+                                              as.character(acs_version),sep=" "),".csv")
+        }
       }
-      full_load_file_name <- file.path(getwd(), load_file_name)
+      full_load_file_name <- file.path(getwd(),"data", temp_load_file_name)
       return(full_load_file_name)})
-    
+    print(filenames)
     # all_states <- lapply(states, function(x){
     #   return(get_lead_dataset(state,
     #                                income_metric=income_metric,
@@ -518,22 +710,23 @@ get_multiple_states <- function(states="all",
     # })
     
     if(parallel){
+      p_load(doParallel,data.table,dplyr,stringr,fst)
       # use parallel setting
       (cl = min(length(states), detectCores()) %>%
           makeCluster(outfile="")) %>%
         registerDoParallel()
-
+      
       registerDoSEQ()
-
+      
       # read and bind
       system.time({
         data = foreach(i = filenames,
-                         .packages = "data.table") %dopar% {
-                           fread(i,colClasses = "character")
-                         } %>%
-          rbindlist(use.names=TRUE, fill = T)
+                       .packages = "data.table") %dopar% {
+                         fread(i,colClasses = "character")
+                       } %>%
+          rbindlist(use.names=TRUE, fill = T)#, idcol="file")
       })
-
+      
       # end of parallel work
       # stopImplicitCluster(cl)
       stopCluster(cl)
@@ -542,22 +735,73 @@ get_multiple_states <- function(states="all",
       num_files <- length(filenames)
       if (num_files > 1){
         for (filename in filenames[2:num_files]){
-          data <- rbindlist(list(data, fread(filename, colClasses="character")), fill=TRUE)
+          data <- rbindlist(list(data, fread(filename, colClasses="character")), fill=TRUE)#, idcol="file")
         }
       }
     }
-    if(save_format=="csv"){
-      write_feather(data, load_file_name)
+  }
+  # get_multiple_states(states=orig_states,
+  #                     income_metric=income_metric, #AMI FPL SMI
+  #                     geographic_scope=geographic_scope, #tract state county city zip
+  #                     acs_version=acs_version,#2016
+  #                     refresh=refresh,
+  #                     col_types=NULL,
+  #                     save_format=load_format, # replica raw new_lead
+  #                     save_ext=save_ext,#"fst",
+  #                     load_format=load_format, 
+  #                     parallel=TRUE,
+  #                     load=FALSE)
+    
+    # convert to correct format
+  if(is.null(already_have)){
+    print(paste0("converting ",load_file_name," from ",load_format," to format: ",save_format))
+    print(names(data))
+    print(nrow(data))
+    print(str(data))
+    if(save_format=="lead"){
+      if(load_format=="raw"){
+        data <- raw_to_lead(data, acs_version=acs_version)
+      }
     }
-    if(save_format=="feather"){
-      write_csv(data, load_file_name)
+    if (save_format=="replica"){
+      # if(load_format=="raw"){
+      #   data <- get_multiple_states(states=states,
+      #                               income_metric=income_metric, #AMI FPL SMI
+      #                               geographic_scope=geographic_scope, #tract state county city zip
+      #                               acs_version=acs_version,#2016
+      #                               refresh=refresh, # shouldn't have to refresh
+      #                               col_types=NULL,
+      #                               save_format="lead", # replica raw new_lead
+      #                               save_ext="csv",#"fst",
+      #                               load_format="raw", 
+      #                               parallel=parallel,
+      #                               load=TRUE)
+      # }
+      # if(load_format=="lead"){
+      #   
+      # }
+      if(load_format=="raw"){
+        data <- raw_to_lead(data, acs_version=acs_version)
+      }
+      data <- lead_to_replica(data)
     }
-  }else{
-    if(save_format=="csv"){
-      data <- read_csv(load_file_name)
+    if(save_format=="in_poverty"){
+      if(load_format=="raw"){
+        data <- raw_to_lead(data, acs_version=acs_version)
+      }
+      if(load_format=="replica"){
+        data <- replica_to_lead(data)
+      }
+      data <- lead_to_poverty(data, acs_version=acs_version, income_metric=income_metric)
     }
-    if(save_format=="feather"){
-      data <- read_feather(load_file_name)
+  }
+    
+    if(save_ext=="feather"){
+      write_feather(data, save_file_name)
+    }
+    if(save_ext=="csv"){
+      fwrite(data, file=save_file_name)
+      # write_csv(data, load_file_name)
     }
     #, 
                      # col_types=cols(
@@ -567,10 +811,10 @@ get_multiple_states <- function(states="all",
                      #   tract_id = readr::col_character(),
                      #   puma10_code = readr::col_character(),
                      #   fmr_code = readr::col_character(),
-                     #   occupancy_type = readr::col_factor(),
+                     #   housing_tenure = readr::col_factor(),
                      #   income_bracket = readr::col_factor(),
                      #   primary_heating_fuel = readr::col_factor(),
-                     #   number_of_units = readr::col_factor(),
+                     #   building_type = readr::col_factor(),
                      #   year_constructed = readr::col_factor(),
                      #   households = col_double(),
                      #   annual_income = col_double(),
@@ -581,10 +825,8 @@ get_multiple_states <- function(states="all",
                      #   min_age = col_double(),
                      #   min_units = col_double(),
                      #   detached = readr::col_factor(),
-                     #   mean_energy_cost = col_double()
+                     #     = col_double()
                      # ))
-  }
-  
   return(type_convert(data %>% mutate_all(as.character), col_types=col_types))
 }
 
@@ -596,10 +838,10 @@ get_multiple_states <- function(states="all",
 #                             tract_id = readr::col_character(),
 #                             puma10_code = readr::col_character(),
 #                             fmr_code = readr::col_character(),
-#                             occupancy_type = readr::col_factor(),
+#                             housing_tenure = readr::col_factor(),
 #                             income_bracket = readr::col_factor(),
 #                             primary_heating_fuel = readr::col_factor(),
-#                             number_of_units = readr::col_factor(),
+#                             building_type = readr::col_factor(),
 #                             year_constructed = readr::col_factor(),
 #                             households = col_double(),
 #                             annual_income = col_double(),
@@ -622,4 +864,50 @@ get_multiple_states <- function(states="all",
 # all(data_reloaded == data, na.rm=TRUE)
 # summary(data_reloaded)
 
+lead_to_poverty <- function(data, acs_version=2018, income_metric){
+  
+  print("consolidating income_bracket")
+  if(tolower(income_metric) %in% tolower(c("fpl15","FPL"))){
+    poverty_cutoff <- "0-100%"
+    data$income_bracket <- as.factor(ifelse(data$income_bracket==poverty_cutoff,"Below Federal Poverty Line", "Above Federal Poverty Line"))
+  } else if (tolower(income_metric) %in% tolower(c("ami68","AMI"))){
+    poverty_cutoff <- "very_low" # this is below 80% of AMI?
+    data$income_bracket <- as.factor(ifelse(data$income_bracket==poverty_cutoff,"Below AMI Poverty Line", "Above AMI Poverty Line"))
+  }
+  
+  
+  print("consolidating housing_tenure")
+  data$housing_tenure <- dplyr::recode_factor(data$housing_tenure, 
+                                                    `OWNER` = "own", 
+                                                    `RENTER` = "rent")
+  print("consolidating min_units")
+  data$number_of_units <- as.factor(ifelse(data$min_units > 1, "mf", "sf"))
+  
+  print("consolidating by all columns")
+  group_columns <- c("geo_id", 
+                     "primary_heating_fuel", 
+                     "income_bracket", 
+                     "number_of_units", 
+                     "housing_tenure" ) #""
+  # print(object.size(clean_lead, units="Gb"))
+  
+  data <- data %>%
+    group_by_at(., .vars=vars(all_of(group_columns))) %>% 
+    mutate(group_households = sum(as.numeric(households), na.rm = T)) %>% 
+    summarise(households = sum(as.numeric(households), na.rm = T),
+              income = sum(as.numeric(income) * group_households, na.rm = T)/
+                sum(group_households, na.rm = T),
+              # lead_mean_energy_cost = sum(mean_energy_cost * group_households)/sum(group_households),
+              electricity_spend = sum(as.numeric(electricity_spend) * group_households, na.rm = T)/
+                sum(group_households, na.rm = T),
+              gas_spend = sum(as.numeric(gas_spend) * group_households, na.rm = T)/
+                sum(group_households, na.rm = T),
+              other_spend = sum(as.numeric(other_spend) * group_households, na.rm = T)/
+                sum(group_households, na.rm = T), 
+              # lead_average_min_age = sum(min_age * group_households)/sum(group_households),
+              pct_detached = sum(as.numeric(detached) * group_households, na.rm = T)/
+                sum(group_households, na.rm = T)) %>% 
+    ungroup()
+  return(data)
+}
 

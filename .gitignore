@@ -108,6 +108,7 @@ venv.bak/
 *.Rproj
 *cache
 *.Rhistory
+.RData
 
 # Data
 *.cpg

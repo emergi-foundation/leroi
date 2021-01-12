@@ -1,0 +1,21 @@
+---
+title: "2018 LEAD Update"
+author: "Eric Scheier"
+date: "10/29/2020"
+output: html_document
+---
+
+```{r}
+source("lead_munging.R")
+testy <- get_lead_dataset(state="NC",
+                             income_metric="AMI", #AMI FPL SMI
+                             resource_id=NULL,
+                             geographic_scope="Census Tracts",#"Census Tracts","State, Counties, Cities"
+                             all_resources=NULL,
+                             refresh=FALSE,
+                             load=TRUE,
+                             format="raw",
+                             save_format="csv",
+                             acs_version=2018#"2016",
+                             )
+```
