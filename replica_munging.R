@@ -112,8 +112,8 @@ get_clean_replica <- function(replica=get_replica_dataset(),
                               "mod", 
                               "mid", 
                               "high")
-  replica_units <- c("sf","mf")
-  replica_housing_tenure <- c("rent","own")
+  replica_units <- c("single-family","multi-family")
+  replica_housing_tenure <- c("rented","owned")
   variables <- c("hh", # household count
                  "elep_hh", # Average Household Electricity Expenditures ($/month)
                  "mwh", # annual generation
@@ -193,8 +193,8 @@ lead_to_replica <- function(clean_lead=NULL){
   # print(object.size(clean_lead, units="Gb"))
   print("consolidating housing_tenure")
   clean_lead$replica_housing_tenure <- dplyr::recode_factor(clean_lead$housing_tenure, 
-                                                     `OWNER` = "own", 
-                                                     `RENTER` = "rent")#,
+                                                     `OWNER` = "owned", 
+                                                     `RENTER` = "rented")#,
   # .default = "D", 
   # .missing = "M")
   print("consolidating income_bracket")
@@ -205,7 +205,7 @@ lead_to_replica <- function(clean_lead=NULL){
                                                    `80-100%` = "mid_high", 
                                                    `100%+` = "mid_high")
   print("consolidating min_units")
-  clean_lead$replica_units <- as.factor(ifelse(clean_lead$min_units > 1, "mf", "sf"))
+  clean_lead$replica_units <- as.factor(ifelse(clean_lead$min_units > 1, "multi-family", "single-family"))
   # seem to be getting a lot of NAs in clean_lead$min_units, likely from "other". Like...13% of homes in NC are NA. Should reconcile...
   
   

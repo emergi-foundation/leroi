@@ -181,7 +181,20 @@ density_chart <- function(graph_data,
                           metric_cutoff_level, 
                           metric_cutoff_label, 
                           chart_title, 
-                          chart_subtitle){
+                          chart_subtitle,
+                          x_label="Proportion of Households"){
+  
+  legend_title <- group_columns
+  if(!is.null(legend_title)){
+    # remove simplified_
+    legend_title <- gsub("simplified_","", legend_title, fixed=TRUE)
+    # normalize words
+    legend_title <- gsub("_"," ",legend_title,fixed=TRUE)
+    legend_title <- str_to_title(legend_title)
+    # combine
+    legend_title <- paste0(paste(legend_title, sep=" ", collapse=" & "))
+  }
+  print(legend_title)
   
   if(!is.null(group_columns)){
     pal_n <- length(levels(interaction(graph_data[,group_columns])))
@@ -224,22 +237,29 @@ density_chart <- function(graph_data,
                         paste0("interaction(", paste0(group_columns, collapse =  ", "), ")")
                       }
     )) + 
-    stat_ewcdf(geom='line',  alpha=1, na.rm=T) + 
-    stat_ewcdf(aes(ymin=..y.., ymax=1), geom='ribbon', alpha=.1, na.rm=T) + 
+    stat_ewcdf(geom='line',  alpha=1, na.rm=T, show.legend = NA) + 
+    stat_ewcdf(aes(ymin=..y.., ymax=1), geom='ribbon', alpha=.1, 
+               na.rm=T, show.legend = NA) + 
     theme_minimal() + 
-    scale_color_manual(values=pal) + 
-    scale_fill_manual(values=pal) + 
+    scale_color_manual(name=legend_title, values=pal) + 
+    scale_fill_manual(name=legend_title, values=pal) + 
+    scale_linetype(name=legend_title) + 
     scale_x_continuous(#labels = scales::dollar_format(accuracy=1),
-                       breaks=seq(from=0,to=100,by=10), 
+                       breaks=seq(from=0,to=120,by=20), 
                        # minor_breaks=seq(from=0,to=20,by=.25),
                        name=metric_label) + 
     scale_y_continuous(labels = scales::label_percent(accuracy = 1), 
-                       breaks=seq(from=0,to=1,by=.1), 
+                       breaks=seq(from=0,to=1,by=.25), 
                        # minor_breaks=seq(from=0,to=1,by=.05),
-                       name="Proportion of Households") + 
-    theme(legend.justification = c(1, 1), 
-          legend.position = c(0.25, 1), 
-          legend.title=element_blank(),
+                       name=x_label) + 
+    guides(color = guide_legend(override.aes = list(size = 1)),
+           fill = guide_legend(override.aes = list(size = 1)),
+           linetype = guide_legend(override.aes = list(size = 1))
+           ) + 
+    theme(legend.justification = c(0, 1), 
+          legend.position = c(0, 1), 
+          legend.title=element_text(size=9),#element_blank(),
+          legend.text=element_text(size=6),
           panel.background = element_blank(),#element_rect(fill="#f1f1f1"),
           panel.grid.major = element_blank(),#element_line(color="#DCDCDC"),
           panel.grid.minor = element_blank(),#element_line(color="#DCDCDC"),
@@ -294,7 +314,8 @@ density_chart <- function(graph_data,
              vjust = -0.5,
              hjust = 0.0,
              parse = FALSE,
-             alpha=0.75) +
+             alpha=0.75,
+             size=3) +
     # annotate("text", 
     #          y = 0, 
     #          x = max(weighted_medians$median_eroi), 
@@ -308,14 +329,9 @@ density_chart <- function(graph_data,
     labs(
       title=chart_title,
       subtitle=chart_subtitle,
-      caption=if(is.null(group_columns)){
-        group_columns
-      } else {
-        paste0("By ",paste(group_columns,
-                           sep="_",
-                           collapse="+"))
-      }) + 
-    coord_flip(xlim=c(0,100),
+      caption=NULL
+      ) + 
+    coord_flip(xlim=c(0,120),
                ylim=c(0,1),
                expand=FALSE)
   
@@ -388,16 +404,17 @@ make_violin_chart <- function(graph_data,
     ))+ 
     # geom_point(stat = "identity") + 
     # geom_boxplot(inherit.aes = TRUE) + 
-    geom_boxplot(width=.75,#position=position_dodge(width=50, preserve="single"),#stat="median",fun.args=c(na.rm=TRUE),
+    geom_boxplot(width=0.5,#position=position_dodge(width=50, preserve="single"),#stat="median",fun.args=c(na.rm=TRUE),
                  notch=TRUE, color="gray", shape = 18, size = 0.5,
                  outlier.shape = NA, na.rm=TRUE) + 
+    scale_x_discrete(expand=expansion(mult=c(0.01,0.01))) + 
     # scale_x_discrete(scale_x_discrete(guide = guide_axis(n.dodge=2))) + 
     # geom_violin(trim=FALSE, alpha=0.3, outlier.shape=NA, color="gray",position=position_dodge(.5)) + 
     scale_y_continuous(#labels = scales::dollar_format(accuracy=1),
                        breaks=seq(from=0,to=100,by=10), 
                        # minor_breaks=seq(from=0,to=20,by=.25),
                        name=metric_label) + 
-    stat_summary(fun.y=median,fun.args=c(na.rm=TRUE),
+    stat_summary(fun=median,fun.args=c(na.rm=TRUE),
                  geom = "point", shape = 18, size = 1) +
     xlab(paste(group_columns,
                sep="_",
@@ -430,8 +447,9 @@ make_violin_chart <- function(graph_data,
                                                  l = 0, 
                                                  unit = "pt")),
           axis.ticks=element_line(color = "black"),
-          axis.ticks.length = unit(-0.1, "cm")#,
-          # axis.text=element_text(size=5)
+          axis.ticks.length.x = unit(2, "points"),
+          axis.ticks.length.y = unit(-2, "points"),
+          axis.text=element_text(size=6)
           ) + 
     labs(
       title=chart_title,
@@ -474,8 +492,8 @@ choropleth_map <- function(
   o <- clean_data[,c("metric_median", "geometry", "state_fips")] %>% 
     ggplot() + 
     geom_sf(aes(fill=metric_median),
-            size=0.005, 
-            color="white",
+            # size=0.005, 
+            color=NA,#"white"
             alpha=0.9) + 
     geom_sf(fill = "transparent", color = "#7B7D7B", #"gray20", 
             size = 0.05, 
@@ -635,7 +653,8 @@ make_all_charts <- function(clean_data,
                             upper_quantile_view=1.0,
                             lower_quantile_view=0.0,
                             chart_title,
-                            chart_subtitle){
+                            chart_subtitle,
+                            x_label="Proportion of Households"){
   
   
   graph_data <- filter_graph_data(clean_data, group_columns, metric_name)
@@ -656,7 +675,8 @@ make_all_charts <- function(clean_data,
                                  metric_cutoff_level, 
                                  metric_cutoff_label, 
                                  chart_title, 
-                                 chart_subtitle)
+                                 chart_subtitle,
+                                 x_label=x_label)
   
   # if(length(group_columns)>1){
   #   violin_chart <- "no violin chart yet for groups of factors"

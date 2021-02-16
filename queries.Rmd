@@ -59,8 +59,8 @@ tract_shp <- st_sf(left_join(census_tracts_shp, replica_sup, by=c("gisjoin")))
 
 ```{r chart_params}
 #chart_title <- "Household Economic Return on Energy Spending"
-#chart_title <- "Community Net Energy Return"
-#chart_subtitle <- "Net Earnings per Dollar of Energy Consumed"
+chart_title <- "Average Electricity Spending"
+chart_subtitle <- "Per Census Tract"
 
 group_columns <- NULL #"income_bracket")#in_poverty
                    #"primary_heating_fuel"
@@ -76,8 +76,7 @@ lower_quantile_view <- 0.0
 
 ```{r grouped_weighted_metrics}
 #data$GEOID <- sub('.', '', data$gisjoin)
-group_variable <- "geoid"# "GEOID" #"state_abbr" #merge_geo_id" #
-group_columns <- c(group_variable) #c("gisjoin") #
+group_columns <- c("geoid") #c("gisjoin") #
 graph_data <- filter_graph_data(clean_data_ami, group_columns, metric_name)
 
 gwm <- grouped_weighted_metrics(graph_data, 
@@ -129,3 +128,39 @@ choropleth_chart <- choropleth_map(
 choropleth_chart
 ```
 
+```{r}
+subset_data_ami <- clean_data_ami %>% filter(geoid %in% map_data$geoid)
+#subset_data_fpl <- clean_data_fpl %>% 
+```
+
+```{r}
+group_columns <- c("housing_tenure") #c("gisjoin") #
+graph_data <- filter_graph_data(subset_data_ami, group_columns, metric_name)
+
+gwm <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.99, 
+                         lower_quantile_view=0.01)
+print(gwm)
+```
+
+```{r}
+group_columns <- c("housing_tenure", "number_of_units") #c("gisjoin") #
+graph_data <- filter_graph_data(subset_data_ami, group_columns, metric_name)
+
+gwm <- grouped_weighted_metrics(graph_data, 
+                         group_columns, 
+                         metric_name, 
+                         metric_cutoff_level, 
+                         upper_quantile_view=0.99, 
+                         lower_quantile_view=0.01)
+print(gwm)
+```
+
+re-merge utility+geoid
+filter by utility
+clarify difference between single family and detached
+
+summarise by replica_mw

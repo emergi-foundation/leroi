@@ -878,10 +878,10 @@ lead_to_poverty <- function(data, acs_version=2018, income_metric){
   
   print("consolidating housing_tenure")
   data$housing_tenure <- dplyr::recode_factor(data$housing_tenure, 
-                                                    `OWNER` = "own", 
-                                                    `RENTER` = "rent")
+                                                    `OWNER` = "owned", 
+                                                    `RENTER` = "rented")
   print("consolidating min_units")
-  data$number_of_units <- as.factor(ifelse(data$min_units > 1, "mf", "sf"))
+  data$number_of_units <- as.factor(ifelse(data$min_units > 1, "multi-family", "single-family"))
   
   print("consolidating by all columns")
   group_columns <- c("geo_id", 
